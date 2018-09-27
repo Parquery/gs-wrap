@@ -1,0 +1,6 @@
+*******
+gswrap
+*******
+
+.. automodule:: gswrap
+    :members:
