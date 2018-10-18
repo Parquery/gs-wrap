@@ -6,6 +6,7 @@ import pathlib
 import subprocess
 import sys
 
+# TODO: run precommit
 
 def main() -> int:
     """"
@@ -30,12 +31,10 @@ def main() -> int:
             ["yapf", "--in-place", "--style=style.yapf", "--recursive", "tests", "gs_wrap", "setup.py", "precommit.py"],
             cwd=repo_root.as_posix())
     else:
-        subprocess.check_call(
-            [
-                "yapf", "--diff", "--style=style.yapf", "--recursive", "tests", "gs_wrap", "bin", "setup.py",
-                "precommit.py"
-            ],
-            cwd=repo_root.as_posix())
+        subprocess.check_call([
+            "yapf", "--diff", "--style=style.yapf", "--recursive", "tests", "gs_wrap", "bin", "setup.py", "precommit.py"
+        ],
+                              cwd=repo_root.as_posix())
 
     print("Mypy'ing...")
     subprocess.check_call(["mypy", "gs_wrap", "tests"], cwd=repo_root.as_posix())
@@ -50,10 +49,9 @@ def main() -> int:
     env = os.environ.copy()
     env['ICONTRACT_SLOW'] = 'true'
 
-    subprocess.check_call(
-        ["coverage", "run", "--source", "gs_wrap", "-m", "unittest", "discover", "tests"],
-        cwd=repo_root.as_posix(),
-        env=env)
+    subprocess.check_call(["coverage", "run", "--source", "gs_wrap", "-m", "unittest", "discover", "tests"],
+                          cwd=repo_root.as_posix(),
+                          env=env)
 
     subprocess.check_call(["coverage", "report"])
 
@@ -61,6 +59,10 @@ def main() -> int:
     subprocess.check_call(["python3", "-m", "doctest", (repo_root / "README.rst").as_posix()])
     for pth in (repo_root / "gs_wrap").glob("**/*.py"):
         subprocess.check_call(["python3", "-m", "doctest", pth.as_posix()])
+
+    print("pyicontract-lint'ing...")
+    for pth in (repo_root / "gs_wrap").glob("**/*.py"):
+        subprocess.check_call(["pyicontract-lint", pth.as_posix()])
 
     return 0
 
