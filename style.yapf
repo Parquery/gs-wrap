@@ -2,5 +2,5 @@
 based_on_style = pep8
 spaces_before_comment = 2
 split_before_logical_operator = true
-column_limit = 120
+column_limit = 80
 coalesce_brackets = true
