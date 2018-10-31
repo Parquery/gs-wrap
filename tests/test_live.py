@@ -11,7 +11,6 @@ import os
 import pathlib
 import shutil
 import subprocess
-import time
 import unittest
 import uuid
 import warnings
@@ -22,41 +21,47 @@ import temppathlib
 
 import gswrap
 
+# TODO(snaji): fixme  pylint: disable=fixme
 # test enviroment bucket
-TEST_GCS_BUCKET = None  # type: str
-TEST_GCS_BUCKET_NO_ACCESS = None  # type: str
+# No google cloud storage emulator at this point of time [31.10.18]
+# https://cloud.google.com/sdk/gcloud/reference/beta/emulators/
+# https://github.com/googleapis/google-cloud-python/issues/4897
+# https://github.com/googleapis/google-cloud-python/issues/4840
+TEST_GCS_BUCKET = "parquery-sandbox"  # type: str
+TEST_GCS_BUCKET_NO_ACCESS = "parquery-data"  # type: str
 NO_WARNINGS = True  # type: bool
-VERBOSE = False  # type: bool
 GCS_FILE_CONTENT = "test file"  # type: str
 
 
 def gcs_test_setup(prefix: str):
+    """Create test folders structure to be used in the live test."""
+
+    # yapf: disable
     gcs_structure = [
-        "gs://{}/{}/d1/d11/f111".format(
-            TEST_GCS_BUCKET, prefix), "gs://{}/{}/d1/d11/f112".format(
-                TEST_GCS_BUCKET, prefix), "gs://{}/{}/d1/f11".format(
-                    TEST_GCS_BUCKET, prefix), "gs://{}/{}/d2/f21".format(
-                        TEST_GCS_BUCKET, prefix), "gs://{}/{}/d2/f22".format(
-                            TEST_GCS_BUCKET, prefix),
-        "gs://{}/{}/d3/d31/d311/f3111".format(
-            TEST_GCS_BUCKET, prefix), "gs://{}/{}/d3/d31/d312/f3131".format(
-                TEST_GCS_BUCKET, prefix), "gs://{}/{}/d3/d31/d312/f3132".format(
-                    TEST_GCS_BUCKET, prefix), "gs://{}/{}/d3/d32/f321".format(
-                        TEST_GCS_BUCKET, prefix),
-        "gs://{}/{}/play/d1/ff".format(
-            TEST_GCS_BUCKET, prefix), "gs://{}/{}/play/d1:/ff".format(
-                TEST_GCS_BUCKET, prefix), "gs://{}/{}/play/d2/ff".format(
-                    TEST_GCS_BUCKET, prefix), "gs://{}/{}/play/test1".format(
-                        TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/d1/d11/f111".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/d1/d11/f112".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/d2/f21".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/d2/f22".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/d3/d31/d311/f3111".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/d3/d31/d312/f3131".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/d3/d31/d312/f3132".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/d3/d32/f321".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/play/d1/ff".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/play/d1:/ff".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/play/d2/ff".format(TEST_GCS_BUCKET, prefix),
+        "gs://{}/{}/play/test1".format(TEST_GCS_BUCKET, prefix),
         "gs://{}/{}/same_file_different_dir/d1/d11/d111/ff".format(
-            TEST_GCS_BUCKET,
-            prefix), "gs://{}/{}/same_file_different_dir/d1/d11/ff".format(
-                TEST_GCS_BUCKET,
-                prefix), "gs://{}/{}/same_file_different_dir/d1/ff".format(
-                    TEST_GCS_BUCKET,
-                    prefix), "gs://{}/{}/same_file_different_dir/d2/ff".format(
-                        TEST_GCS_BUCKET, prefix)
+            TEST_GCS_BUCKET,prefix),
+        "gs://{}/{}/same_file_different_dir/d1/d11/ff".format(
+            TEST_GCS_BUCKET,prefix),
+        "gs://{}/{}/same_file_different_dir/d1/ff".format(
+            TEST_GCS_BUCKET,prefix),
+        "gs://{}/{}/same_file_different_dir/d2/ff".format(
+            TEST_GCS_BUCKET, prefix)
     ]
+
+    # yapf: enable
     futures = []  # type: List[concurrent.futures.Future]
     with temppathlib.NamedTemporaryFile() as tmp_file:
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -69,28 +74,17 @@ def gcs_test_setup(prefix: str):
                 ]
 
                 setup_thread = executor.submit(
-                    subprocess_single_cmd_execution, cmd=cmd, file=file)
+                    subprocess.check_call, cmd, stdin=subprocess.PIPE)
                 futures.append(setup_thread)
 
 
-def subprocess_single_cmd_execution(cmd: List[str], file: str):
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    proc.communicate()
-    if proc.returncode != 0:
-        raise RuntimeError("Failed to write to the object: {}".format(file))
-
-
 def gcs_test_teardown(prefix: str):
+    """Remove created test folders structure which was used in the live test."""
     cmd = [
         "gsutil", "-m", "rm", "-r", "gs://{}/{}".format(TEST_GCS_BUCKET, prefix)
     ]
 
-    proc = subprocess.Popen(
-        cmd,
-        universal_newlines=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE)
-    proc.communicate()
+    subprocess.check_call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def call_gsutil_ls(path: str, recursive: bool = False) -> List[str]:
@@ -107,7 +101,7 @@ def call_gsutil_ls(path: str, recursive: bool = False) -> List[str]:
     stdout, stderr = proc.communicate()
 
     if proc.returncode != 0:
-        print(stderr)
+        raise RuntimeError("{}".format(str(stderr)))
 
     lines = []  # type: List[str]
     for line in stdout.split('\n'):
@@ -127,11 +121,7 @@ def call_gcs_client_ls(client: gswrap.Client,
                        path: str,
                        recursive: bool = False) -> List[str]:
 
-    try:
-        list_ls = client.ls(gcs_url=path, recursive=recursive)
-    except google.api_core.exceptions.GoogleAPIError as err:
-        print(err)
-        return []
+    list_ls = client.ls(gcs_url=path, recursive=recursive)
 
     return list_ls
 
@@ -161,69 +151,73 @@ class TestLS(unittest.TestCase):
 
     def test_gsutil_ls_non_recursive(self):
         test_cases = [
-            # no wildcards
-            "gs://bucket-inexistent",
-            "gs://{}".format(TEST_GCS_BUCKET_NO_ACCESS),
-            "gs://{}".format(TEST_GCS_BUCKET[:-1]),
             "gs://{}".format(TEST_GCS_BUCKET),
-            "gs://{}/".format(TEST_GCS_BUCKET),
-            "gs://{}/{}".format(TEST_GCS_BUCKET, self.bucket_prefix[:-1]),
-            "gs://{}/{}".format(TEST_GCS_BUCKET, self.bucket_prefix),
-            "gs://{}/{}/".format(TEST_GCS_BUCKET, self.bucket_prefix),
-            "gs://{}/{}/d".format(TEST_GCS_BUCKET, self.bucket_prefix),
-            "gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
-            "gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix)
+            "gs://{}/".format(TEST_GCS_BUCKET), "gs://{}/{}".format(
+                TEST_GCS_BUCKET, self.bucket_prefix), "gs://{}/{}/".format(
+                    TEST_GCS_BUCKET,
+                    self.bucket_prefix), "gs://{}/{}/d1".format(
+                        TEST_GCS_BUCKET,
+                        self.bucket_prefix), "gs://{}/{}/d1/".format(
+                            TEST_GCS_BUCKET, self.bucket_prefix)
         ]
 
-        for i, test_case in enumerate(test_cases):
-            print("{}/{}".format(i + 1, len(test_cases)))
-            start_gsutil = time.time()
+        for test_case in test_cases:
             list_gsutil = call_gsutil_ls(path=test_case)
-            end_gsutil = time.time()
-            start_gcs = time.time()
             list_gcs = call_gcs_client_ls(client=self.client, path=test_case)
-            end_gcs = time.time()
-            if VERBOSE:
-                print('Testcase: {}, Time: gsutil: {}, gcs: {}'.format(
-                    test_case, end_gsutil - start_gsutil, end_gcs - start_gcs))
-                print('Gsutil: ', list_gsutil)
-                print('GCS:    ', list_gcs)
-                print('#########################')
 
             self.assertListEqual(list_gsutil, list_gcs)
 
+    def test_gsutil_ls_non_recursive_check_raises(self):
+
+        test_cases = [
+            "gs://{}".format(TEST_GCS_BUCKET_NO_ACCESS),
+            "gs://{}".format(TEST_GCS_BUCKET[:-1]), "gs://{}/{}".format(
+                TEST_GCS_BUCKET,
+                self.bucket_prefix[:-1]), "gs://{}/{}/d".format(
+                    TEST_GCS_BUCKET, self.bucket_prefix)
+        ]
+        for test_case in test_cases:
+            self.assertRaises(RuntimeError, call_gsutil_ls, path=test_case)
+            self.assertRaises(
+                google.api_core.exceptions.GoogleAPIError,
+                call_gcs_client_ls,
+                client=self.client,
+                path=test_case)
+
     def test_gsutil_ls_recursive(self):
         test_cases = [
-            # no wildcards
+            "gs://{}/{}".format(TEST_GCS_BUCKET, self.bucket_prefix),
+            "gs://{}/{}/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+            "gs://{}/{}/d1".format(TEST_GCS_BUCKET,
+                                   self.bucket_prefix), "gs://{}/{}/d1/".format(
+                                       TEST_GCS_BUCKET, self.bucket_prefix)
+        ]
+
+        for test_case in test_cases:
+            list_gsutil = call_gsutil_ls(path=test_case, recursive=True)
+            list_gcs = call_gcs_client_ls(
+                client=self.client, path=test_case, recursive=True)
+            # order of 'ls -r' is different
+            self.assertListEqual(sorted(list_gsutil), sorted(list_gcs))
+
+    def test_gsutil_ls_recursive_check_raises(self):
+        test_cases = [
             "gs://bucket-inexistent",
             "gs://{}".format(TEST_GCS_BUCKET_NO_ACCESS),
             "gs://{}".format(TEST_GCS_BUCKET[:-1]),
             "gs://{}/{}".format(TEST_GCS_BUCKET, self.bucket_prefix[:-1]),
-            "gs://{}/{}".format(TEST_GCS_BUCKET, self.bucket_prefix),
-            "gs://{}/{}/".format(TEST_GCS_BUCKET, self.bucket_prefix),
             "gs://{}/{}/d".format(TEST_GCS_BUCKET, self.bucket_prefix),
-            "gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
-            "gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix)
         ]
 
-        for i, test_case in enumerate(test_cases):
-            print("{}/{}".format(i + 1, len(test_cases)))
-            start_gsutil = time.time()
-            list_gsutil = call_gsutil_ls(path=test_case, recursive=True)
-            end_gsutil = time.time()
-            start_gcs = time.time()
-            list_gcs = call_gcs_client_ls(
-                client=self.client, path=test_case, recursive=True)
-            end_gcs = time.time()
-            if VERBOSE:
-                print('Testcase: {}, Time: gsutil: {}, gcs: {}'.format(
-                    test_case, end_gsutil - start_gsutil, end_gcs - start_gcs))
-                print('Gsutil: ', list_gsutil)
-                print('GCS:    ', list_gcs)
-                print('#########################')
-
-            # order of 'ls -r' is different
-            self.assertListEqual(sorted(list_gsutil), sorted(list_gcs))
+        for test_case in test_cases:
+            self.assertRaises(
+                RuntimeError, call_gsutil_ls, path=test_case, recursive=True)
+            self.assertRaises(
+                google.api_core.exceptions.GoogleAPIError,
+                call_gcs_client_ls,
+                client=self.client,
+                path=test_case,
+                recursive=True)
 
 
 def call_gsutil_cp(src: str, dst: str, recursive: bool):
@@ -232,12 +226,11 @@ def call_gsutil_cp(src: str, dst: str, recursive: bool):
     else:
         cmd = ["gsutil", "-m", "cp", src, dst]
 
-    proc = subprocess.Popen(
+    subprocess.check_call(
         cmd,
         universal_newlines=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE)
-    proc.communicate()
 
 
 def call_gsutil_rm(path: str, recursive: bool = False):
@@ -246,23 +239,11 @@ def call_gsutil_rm(path: str, recursive: bool = False):
     else:
         cmd = ["gsutil", "-m", "rm", path]
 
-    proc = subprocess.Popen(
+    subprocess.check_call(
         cmd,
         universal_newlines=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE)
-    proc.communicate()
-
-
-def call_gcs_client_cp(client: gswrap.Client, src: str, dst: str,
-                       recursive: bool):
-
-    try:
-        client.cp(src=src, dst=dst, recursive=recursive)
-    except google.api_core.exceptions.GoogleAPIError as err:
-        print(err)
-    except ValueError as valerr:
-        print(valerr)
 
 
 class TestCPRemote(unittest.TestCase):
@@ -345,63 +326,37 @@ class TestCPRemote(unittest.TestCase):
         self.client.rm(gcs_url=dst2, recursive=True)
 
     def test_gsutil_vs_gswrap_copy_recursive(self):  # pylint: disable=invalid-name
+
+        # yapf: disable
         test_cases = [
-            [
-                "gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/dtest/".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/dtest/".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/dtest".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/dtest".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d3/d31/d311/f3111".format(TEST_GCS_BUCKET,
+            ["gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/dtest/".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/dtest/".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/dtest".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/dtest".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d3/d31/d311/f3111".format(TEST_GCS_BUCKET,
+                                                   self.bucket_prefix),
+             "gs://{}/{}/ftest".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d3/d31/d311/f3111".format(TEST_GCS_BUCKET,
                                                       self.bucket_prefix),
-                "gs://{}/{}/ftest".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d3/d31/d311/f3111".format(TEST_GCS_BUCKET,
-                                                      self.bucket_prefix),
-                "gs://{}/{}/ftest/".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/ftest".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/ftest/".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
+             "gs://{}/{}/ftest/".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/ftest".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/ftest/".format(TEST_GCS_BUCKET, self.bucket_prefix)],
         ]
+        # yapf: enable
 
         gsutil_ls_set = set()
         gcs_ls_set = set()
 
         ls_path = "gs://{}/{}/".format(TEST_GCS_BUCKET, self.bucket_prefix)
 
-        copy_time_gsutil = 0
-        copy_time_gcs = 0
-        for i, test_case in enumerate(test_cases):
-            print("{}/{} : Testcase: {}".format(i + 1, len(test_cases),
-                                                test_case))
-            if VERBOSE:
-                print("gcs start...")
-            start = time.time()
-            call_gcs_client_cp(
-                client=self.client,
-                src=test_case[0],
-                dst=test_case[1],
-                recursive=True)
-            end = time.time()
-            copy_time_gcs += end - start
+        for test_case in test_cases:
+            self.client.cp(src=test_case[0], dst=test_case[1], recursive=True)
             gcs_paths = self.client.ls(gcs_url=ls_path, recursive=True)
             [gcs_ls_set.add(path) for path in gcs_paths]
             call_gsutil_rm(
@@ -409,12 +364,7 @@ class TestCPRemote(unittest.TestCase):
                 recursive=True)
             gcs_test_setup(prefix=self.bucket_prefix)
 
-            if VERBOSE:
-                print("gsutil start...")
-            start = time.time()
             call_gsutil_cp(src=test_case[0], dst=test_case[1], recursive=True)
-            end = time.time()
-            copy_time_gsutil += end - start
             gsutil_paths = self.client.ls(gcs_url=ls_path, recursive=True)
             [gsutil_ls_set.add(path) for path in gsutil_paths]
             call_gsutil_rm(
@@ -424,69 +374,31 @@ class TestCPRemote(unittest.TestCase):
 
             self.assertListEqual(sorted(gsutil_paths), sorted(gcs_paths))
 
-        if VERBOSE:
-            print("time gsutil: {}, gcs: {}".format(copy_time_gsutil,
-                                                    copy_time_gcs))
         self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
 
     def test_gsutil_vs_gswrap_copy_non_recursive(self):  # pylint: disable=invalid-name
+        # yapf: disable
         test_cases = [
-            [
-                "gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/dtest/".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/dtest/".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/dtest".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/dtest".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d3/d31/d311/f3111".format(TEST_GCS_BUCKET,
+            ["gs://{}/{}/d3/d31/d311/f3111".format(TEST_GCS_BUCKET,
                                                       self.bucket_prefix),
-                "gs://{}/{}/ftest".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d3/d31/d311/f3111".format(TEST_GCS_BUCKET,
+             "gs://{}/{}/ftest".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d3/d31/d311/f3111".format(TEST_GCS_BUCKET,
                                                       self.bucket_prefix),
-                "gs://{}/{}/ftest/".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/ftest".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
-            [
-                "gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                "gs://{}/{}/ftest/".format(TEST_GCS_BUCKET, self.bucket_prefix)
-            ],
+             "gs://{}/{}/ftest/".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/ftest".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/ftest/".format(TEST_GCS_BUCKET, self.bucket_prefix)],
         ]
+        # yapf: enable
 
         gsutil_ls_set = set()
         gcs_ls_set = set()
 
         ls_path = "gs://{}/{}/".format(TEST_GCS_BUCKET, self.bucket_prefix)
 
-        copy_time_gsutil = 0
-        copy_time_gcs = 0
-        for i, test_case in enumerate(test_cases):
-            print("{}/{} : Testcase: {}".format(i + 1, len(test_cases),
-                                                test_case))
-            if VERBOSE:
-                print("gcs start...")
-            start = time.time()
-            call_gcs_client_cp(
-                client=self.client,
-                src=test_case[0],
-                dst=test_case[1],
-                recursive=False)
-            end = time.time()
-            copy_time_gcs += end - start
+        for test_case in test_cases:
+            self.client.cp(src=test_case[0], dst=test_case[1], recursive=False)
             gcs_paths = self.client.ls(gcs_url=ls_path, recursive=True)
             [gcs_ls_set.add(path) for path in gcs_paths]
             call_gsutil_rm(
@@ -494,12 +406,7 @@ class TestCPRemote(unittest.TestCase):
                 recursive=True)
             gcs_test_setup(prefix=self.bucket_prefix)
 
-            if VERBOSE:
-                print("gsutil start...")
-            start = time.time()
             call_gsutil_cp(src=test_case[0], dst=test_case[1], recursive=False)
-            end = time.time()
-            copy_time_gsutil += end - start
             gsutil_paths = self.client.ls(gcs_url=ls_path, recursive=True)
             [gsutil_ls_set.add(path) for path in gsutil_paths]
             call_gsutil_rm(
@@ -509,24 +416,61 @@ class TestCPRemote(unittest.TestCase):
 
             self.assertListEqual(sorted(gsutil_paths), sorted(gcs_paths))
 
-        if VERBOSE:
-            print("time gsutil: {}, gcs: {}".format(copy_time_gsutil,
-                                                    copy_time_gcs))
         self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
 
+    def test_gsutil_vs_gswrap_copy_non_recursive_check_raises(self):  # pylint: disable=invalid-name
+        # yapf: disable
+        test_cases = [
+            ["gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/dtest/".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/dtest/".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/dtest".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+            ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+             "gs://{}/{}/dtest".format(TEST_GCS_BUCKET, self.bucket_prefix)],
+        ]
+        # yapf: enable
+
+        for test_case in test_cases:
+            self.assertRaises(
+                google.api_core.exceptions.GoogleAPIError,
+                self.client.cp,
+                src=test_case[0],
+                dst=test_case[1],
+                recursive=False)
+
+            call_gsutil_rm(
+                path="gs://{}/{}/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                recursive=True)
+            gcs_test_setup(prefix=self.bucket_prefix)
+
+            self.assertRaises(
+                subprocess.CalledProcessError,
+                call_gsutil_cp,
+                src=test_case[0],
+                dst=test_case[1],
+                recursive=False)
+            call_gsutil_rm(
+                path="gs://{}/{}/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                recursive=True)
+            gcs_test_setup(prefix=self.bucket_prefix)
+
     def test_cp_no_clobber(self):
+        # yapf: disable
         test_case = [
-            "gs://{}/{}/d1/d11/f111".format(TEST_GCS_BUCKET,
-                                            self.bucket_prefix),
+            "gs://{}/{}/d1/d11/f111".format(TEST_GCS_BUCKET, self.bucket_prefix)
+            ,
             "gs://{}/{}/play/d2/ff".format(TEST_GCS_BUCKET, self.bucket_prefix)
         ]
+        # yapf: enable
 
         path_f111 = gswrap._UniformPath(res_loc=test_case[0])
         path_ff = gswrap._UniformPath(res_loc=test_case[1])
         blob_f11 = self.client._bucket.get_blob(
-            path_f111.prefix._convert_to_posix(remove_leading_backslash=True))
+            path_f111.prefix.as_posix(remove_leading_backslash=True))
         blob_ff = self.client._bucket.get_blob(
-            path_ff.prefix._convert_to_posix(remove_leading_backslash=True))
+            path_ff.prefix.as_posix(remove_leading_backslash=True))
 
         timestamp_f11 = blob_f11.updated
         timestamp_ff = blob_ff.updated
@@ -534,9 +478,9 @@ class TestCPRemote(unittest.TestCase):
         self.client.cp(src=test_case[0], dst=test_case[1], no_clobber=True)
 
         blob_f11_not_updated = self.client._bucket.get_blob(
-            path_f111.prefix._convert_to_posix(remove_leading_backslash=True))
+            path_f111.prefix.as_posix(remove_leading_backslash=True))
         blob_ff_not_updated = self.client._bucket.get_blob(
-            path_ff.prefix._convert_to_posix(remove_leading_backslash=True))
+            path_ff.prefix.as_posix(remove_leading_backslash=True))
 
         timestamp_f11_not_updated = blob_f11_not_updated.updated
         timestamp_ff_not_updated = blob_ff_not_updated.updated
@@ -545,18 +489,20 @@ class TestCPRemote(unittest.TestCase):
         self.assertEqual(timestamp_ff, timestamp_ff_not_updated)
 
     def test_cp_clobber(self):
+        # yapf: disable
         test_case = [
-            "gs://{}/{}/d1/d11/f111".format(TEST_GCS_BUCKET,
-                                            self.bucket_prefix),
+            "gs://{}/{}/d1/d11/f111".format(TEST_GCS_BUCKET, self.bucket_prefix)
+            ,
             "gs://{}/{}/play/d2/ff".format(TEST_GCS_BUCKET, self.bucket_prefix)
         ]
+        # yapf: enable
 
         path_f111 = gswrap._UniformPath(res_loc=test_case[0])
         path_ff = gswrap._UniformPath(res_loc=test_case[1])
         blob_f11 = self.client._bucket.get_blob(
-            path_f111.prefix._convert_to_posix(remove_leading_backslash=True))
+            path_f111.prefix.as_posix(remove_leading_backslash=True))
         blob_ff = self.client._bucket.get_blob(
-            path_ff.prefix._convert_to_posix(remove_leading_backslash=True))
+            path_ff.prefix.as_posix(remove_leading_backslash=True))
 
         timestamp_f11 = blob_f11.updated
         timestamp_ff = blob_ff.updated
@@ -564,9 +510,9 @@ class TestCPRemote(unittest.TestCase):
         self.client.cp(src=test_case[0], dst=test_case[1], no_clobber=False)
 
         blob_f11_not_updated = self.client._bucket.get_blob(
-            path_f111.prefix._convert_to_posix(remove_leading_backslash=True))
+            path_f111.prefix.as_posix(remove_leading_backslash=True))
         blob_ff_updated = self.client._bucket.get_blob(
-            path_ff.prefix._convert_to_posix(remove_leading_backslash=True))
+            path_ff.prefix.as_posix(remove_leading_backslash=True))
 
         timestamp_f11_not_updated = blob_f11_not_updated.updated
         timestamp_ff_updated = blob_ff_updated.updated
@@ -639,66 +585,36 @@ class TestCPUpload(unittest.TestCase):
             another_local_file = local_path / 'another-local-file'
             another_local_file.write_text('hello again')
 
+            # yapf: disable
             test_cases = [
-                [
-                    local_file.as_posix(), "gs://{}/{}/ftest/".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_file.as_posix(), "gs://{}/{}/ftest".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path_posix, "gs://{}/{}/ftest/".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path_posix, "gs://{}/{}/local-file".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path_posix, "gs://{}/{}/ftest".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path.as_posix(), "gs://{}/{}/dtest".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path.as_posix(), "gs://{}/{}/dtest/".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path.as_posix() + '/', "gs://{}/{}/dtest".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path.as_posix() + '/', "gs://{}/{}/dtest/".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
+                [local_file.as_posix(), "gs://{}/{}/ftest/".format(
+                    TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_file.as_posix(), "gs://{}/{}/ftest".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path_posix, "gs://{}/{}/ftest/".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path_posix, "gs://{}/{}/local-file".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path_posix, "gs://{}/{}/ftest".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path.as_posix(), "gs://{}/{}/dtest".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path.as_posix(), "gs://{}/{}/dtest/".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path.as_posix() + '/', "gs://{}/{}/dtest".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path.as_posix() + '/', "gs://{}/{}/dtest/".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
             ]
-
+            # yapf: enable
             gsutil_ls_set = set()
             gcs_ls_set = set()
 
             ls_path = "gs://{}/{}/".format(TEST_GCS_BUCKET, self.bucket_prefix)
 
-            copy_time_gsutil = 0
-            copy_time_gcs = 0
-            for i, test_case in enumerate(test_cases):
-                print("{}/{} : Testcase: {}".format(i + 1, len(test_cases),
-                                                    test_case))
-
-                if VERBOSE:
-                    print("gcs start...")
-                start = time.time()
-                call_gcs_client_cp(
-                    client=self.client,
-                    src=test_case[0],
-                    dst=test_case[1],
-                    recursive=True)
-                end = time.time()
-                copy_time_gcs += end - start
+            for test_case in test_cases:
+                self.client.cp(
+                    src=test_case[0], dst=test_case[1], recursive=True)
                 gcs_paths = self.client.ls(gcs_url=ls_path, recursive=True)
                 [gcs_ls_set.add(path) for path in gcs_paths]
                 call_gsutil_rm(
@@ -707,13 +623,8 @@ class TestCPUpload(unittest.TestCase):
                     recursive=True)
                 gcs_test_setup(prefix=self.bucket_prefix)
 
-                if VERBOSE:
-                    print("gsutil start...")
-                start = time.time()
                 call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=True)
-                end = time.time()
-                copy_time_gsutil += end - start
                 gsutil_paths = self.client.ls(gcs_url=ls_path, recursive=True)
                 [gsutil_ls_set.add(path) for path in gsutil_paths]
                 call_gsutil_rm(
@@ -723,10 +634,6 @@ class TestCPUpload(unittest.TestCase):
                 gcs_test_setup(prefix=self.bucket_prefix)
 
                 self.assertListEqual(sorted(gsutil_paths), sorted(gcs_paths))
-
-            if VERBOSE:
-                print("time gsutil: {}, gcs: {}".format(copy_time_gsutil,
-                                                        copy_time_gcs))
 
             self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
 
@@ -741,66 +648,28 @@ class TestCPUpload(unittest.TestCase):
             another_local_file = local_path / 'another-local-file'
             another_local_file.write_text('hello again')
 
+            # yapf: disable
             test_cases = [
-                [
-                    local_file.as_posix(), "gs://{}/{}/ftest/".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_file.as_posix(), "gs://{}/{}/ftest".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path_posix, "gs://{}/{}/ftest/".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path_posix, "gs://{}/{}/local-file".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path_posix, "gs://{}/{}/ftest".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path.as_posix(), "gs://{}/{}/dtest".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path.as_posix(), "gs://{}/{}/dtest/".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path.as_posix() + '/', "gs://{}/{}/dtest".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
-                [
-                    local_path.as_posix() + '/', "gs://{}/{}/dtest/".format(
-                        TEST_GCS_BUCKET, self.bucket_prefix)
-                ],
+                [local_file.as_posix(), "gs://{}/{}/ftest/".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_file.as_posix(), "gs://{}/{}/ftest".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path_posix, "gs://{}/{}/ftest/".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path_posix, "gs://{}/{}/local-file".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path_posix, "gs://{}/{}/ftest".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
             ]
-
+            # yapf: enable
             gsutil_ls_set = set()
             gcs_ls_set = set()
 
             ls_path = "gs://{}/{}/".format(TEST_GCS_BUCKET, self.bucket_prefix)
 
-            copy_time_gsutil = 0
-            copy_time_gcs = 0
-            for i, test_case in enumerate(test_cases):
-                print("{}/{} : Testcase: {}".format(i + 1, len(test_cases),
-                                                    test_case))
-
-                if VERBOSE:
-                    print("gcs start...")
-                start = time.time()
-                call_gcs_client_cp(
-                    client=self.client,
-                    src=test_case[0],
-                    dst=test_case[1],
-                    recursive=False)
-                end = time.time()
-                copy_time_gcs += end - start
+            for test_case in test_cases:
+                self.client.cp(
+                    src=test_case[0], dst=test_case[1], recursive=False)
                 gcs_paths = self.client.ls(gcs_url=ls_path, recursive=True)
                 [gcs_ls_set.add(path) for path in gcs_paths]
                 call_gsutil_rm(
@@ -808,14 +677,8 @@ class TestCPUpload(unittest.TestCase):
                                               self.bucket_prefix),
                     recursive=True)
                 gcs_test_setup(prefix=self.bucket_prefix)
-
-                if VERBOSE:
-                    print("gsutil start...")
-                start = time.time()
                 call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=False)
-                end = time.time()
-                copy_time_gsutil += end - start
                 gsutil_paths = self.client.ls(gcs_url=ls_path, recursive=True)
                 [gsutil_ls_set.add(path) for path in gsutil_paths]
                 call_gsutil_rm(
@@ -826,11 +689,54 @@ class TestCPUpload(unittest.TestCase):
 
                 self.assertListEqual(sorted(gsutil_paths), sorted(gcs_paths))
 
-            if VERBOSE:
-                print("time gsutil: {}, gcs: {}".format(copy_time_gsutil,
-                                                        copy_time_gcs))
-
             self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
+
+    def test_gsutil_vs_gswrap_upload_non_recursive_check_raises(self):  # pylint: disable=invalid-name
+        # pylint: disable=too-many-locals
+        with temppathlib.TemporaryDirectory() as tmp_dir:
+            local_path = tmp_dir.path / 'tmp'
+            local_path.mkdir()
+            local_file = local_path / 'local-file'
+            local_file.write_text('hello')
+            another_local_file = local_path / 'another-local-file'
+            another_local_file.write_text('hello again')
+
+            # yapf: disable
+            test_cases = [
+                [local_path.as_posix(), "gs://{}/{}/dtest".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path.as_posix(), "gs://{}/{}/dtest/".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path.as_posix() + '/', "gs://{}/{}/dtest".format(
+                        TEST_GCS_BUCKET, self.bucket_prefix)],
+                [local_path.as_posix() + '/', "gs://{}/{}/dtest/".format(
+                       TEST_GCS_BUCKET, self.bucket_prefix)],
+            ]
+            # yapf: enable
+            for test_case in test_cases:
+                self.assertRaises(
+                    ValueError,
+                    self.client.cp,
+                    src=test_case[0],
+                    dst=test_case[1],
+                    recursive=False)
+                call_gsutil_rm(
+                    path="gs://{}/{}/".format(TEST_GCS_BUCKET,
+                                              self.bucket_prefix),
+                    recursive=True)
+                gcs_test_setup(prefix=self.bucket_prefix)
+
+                self.assertRaises(
+                    subprocess.CalledProcessError,
+                    call_gsutil_cp,
+                    src=test_case[0],
+                    dst=test_case[1],
+                    recursive=False)
+                call_gsutil_rm(
+                    path="gs://{}/{}/".format(TEST_GCS_BUCKET,
+                                              self.bucket_prefix),
+                    recursive=True)
+                gcs_test_setup(prefix=self.bucket_prefix)
 
     def test_upload_no_clobber(self):
 
@@ -878,9 +784,8 @@ class TestCPUpload(unittest.TestCase):
 def ls_local(path: str) -> List[str]:
     paths = []  # type: List[str]
     for root, dirs, files in os.walk(path):  # pylint: disable=unused-variable
-        if files:
-            for file in files:
-                paths.append(os.path.join(root, file))
+        for file in files:
+            paths.append(os.path.join(root, file))
 
     return paths
 
@@ -936,75 +841,35 @@ class TestCPDownload(unittest.TestCase):
             local_dir = local_path / 'local-dir'
             local_dir.mkdir()
 
+            # yapf: disable
             test_cases = [
-                [
-                    "gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET,
-                                               self.bucket_prefix),
-                    (local_path / 'uninitialized-file').as_posix()
-                ],
-                [
-                    "gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET,
-                                               self.bucket_prefix),
-                    local_file.as_posix()
-                ],
-                [
-                    "gs://{}/{}/d3/d31/d311".format(TEST_GCS_BUCKET,
-                                                    self.bucket_prefix),
-                    local_file.as_posix()
-                ],  # NotADirectoryError
-                [
-                    "gs://{}/{}/d3/d31/d311/".format(TEST_GCS_BUCKET,
-                                                     self.bucket_prefix),
-                    local_file.as_posix()
-                ],  # NotADirectoryError
-                [
-                    "gs://{}/{}/d1/".format(TEST_GCS_BUCKET,
-                                            self.bucket_prefix),
-                    local_dir.as_posix()
-                ],
-                [
-                    "gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                    local_dir.as_posix()
-                ],
-                [
-                    "gs://{}/{}/d1/".format(TEST_GCS_BUCKET,
-                                            self.bucket_prefix),
-                    local_dir.as_posix() + '/'
-                ],
-                [
-                    "gs://{}/{}/d1/".format(TEST_GCS_BUCKET,
-                                            self.bucket_prefix),
-                    local_dir.as_posix() + '/'
-                ],
+                ["gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix)
+                    , (local_path / 'uninitialized-file').as_posix()],
+                ["gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET,self.bucket_prefix),
+                    local_file.as_posix()],
+                ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                 local_dir.as_posix()],
+                ["gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                    local_dir.as_posix()],
+                ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                 local_dir.as_posix() + '/'],
+                ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                 local_dir.as_posix() + '/'],
             ]
-
+            # yapf: enable
             gsutil_ls_set = set()
             gcs_ls_set = set()
 
             ls_path = tmp_dir.path.as_posix()
 
-            copy_time_gsutil = 0
-            copy_time_gcs = 0
-            for i, test_case in enumerate(test_cases):
+            for test_case in test_cases:
                 if not local_dir.exists():
                     local_dir = local_path / 'local-dir'
                     local_dir.mkdir()
 
-                print("{}/{} : Testcase: {}".format(i + 1, len(test_cases),
-                                                    test_case))
-                if VERBOSE:
-                    print("gcs start...")
-                start = time.time()
-                try:
-                    call_gcs_client_cp(
-                        client=self.client,
-                        src=test_case[0],
-                        dst=test_case[1],
-                        recursive=True)
-                except NotADirectoryError:
-                    pass
-                end = time.time()
-                copy_time_gcs += end - start
+                self.client.cp(
+                    src=test_case[0], dst=test_case[1], recursive=True)
+
                 gcs_paths = ls_local(path=ls_path)
                 [gcs_ls_set.add(path) for path in gcs_paths]
                 if pathlib.Path(test_case[1]).is_dir():
@@ -1014,13 +879,8 @@ class TestCPDownload(unittest.TestCase):
                     local_dir = local_path / 'local-dir'
                     local_dir.mkdir()
 
-                if VERBOSE:
-                    print("gsutil start...")
-                start = time.time()
                 call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=True)
-                end = time.time()
-                copy_time_gsutil += end - start
                 gsutil_paths = ls_local(path=ls_path)
                 [gsutil_ls_set.add(path) for path in gsutil_paths]
                 if pathlib.Path(test_case[1]).is_dir():
@@ -1028,10 +888,57 @@ class TestCPDownload(unittest.TestCase):
 
                 self.assertListEqual(gsutil_paths, gcs_paths)
 
-            if VERBOSE:
-                print("time gsutil: {}, gcs: {}".format(copy_time_gsutil,
-                                                        copy_time_gcs))
             self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
+
+    def test_gsutil_vs_gswrap_download_recursive_check_raises(self):  # pylint: disable=invalid-name
+        # pylint: disable=too-many-locals
+        with temppathlib.TemporaryDirectory() as tmp_dir:
+            local_path = tmp_dir.path / 'tmp'
+            local_path.mkdir()
+            local_file = local_path / 'local-file'
+            local_file.write_text('hello')
+            another_local_file = local_path / 'another-local-file'
+            another_local_file.write_text('hello again')
+            local_dir = local_path / 'local-dir'
+            local_dir.mkdir()
+
+            # yapf: disable
+            test_cases = [
+                ["gs://{}/{}/d3/d31/d311".format(TEST_GCS_BUCKET,
+                                                 self.bucket_prefix),
+                 local_file.as_posix()],
+                ["gs://{}/{}/d3/d31/d311/".format(TEST_GCS_BUCKET,
+                                                  self.bucket_prefix),
+                 local_file.as_posix()],
+            ]
+            # yapf: enable
+
+            for test_case in test_cases:
+                if not local_dir.exists():
+                    local_dir = local_path / 'local-dir'
+                    local_dir.mkdir()
+
+                self.assertRaises(
+                    NotADirectoryError,
+                    self.client.cp,
+                    src=test_case[0],
+                    dst=test_case[1],
+                    recursive=True)
+                if pathlib.Path(test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1], True)
+
+                if not local_dir.exists():
+                    local_dir = local_path / 'local-dir'
+                    local_dir.mkdir()
+
+                self.assertRaises(
+                    subprocess.CalledProcessError,
+                    call_gsutil_cp,
+                    src=test_case[0],
+                    dst=test_case[1],
+                    recursive=True)
+                if pathlib.Path(test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1], True)
 
     def test_gsutil_vs_gswrap_download_non_recursive(self):  # pylint: disable=invalid-name
         # pylint: disable=too-many-locals
@@ -1045,75 +952,28 @@ class TestCPDownload(unittest.TestCase):
             local_dir = local_path / 'local-dir'
             local_dir.mkdir()
 
+            # yapf: disable
             test_cases = [
-                [
-                    "gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET,
-                                               self.bucket_prefix),
-                    (local_path / 'uninitialized-file').as_posix()
-                ],
-                [
-                    "gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET,
-                                               self.bucket_prefix),
-                    local_file.as_posix()
-                ],
-                [
-                    "gs://{}/{}/d3/d31/d311".format(TEST_GCS_BUCKET,
-                                                    self.bucket_prefix),
-                    local_file.as_posix()
-                ],  # NotADirectoryError
-                [
-                    "gs://{}/{}/d3/d31/d311/".format(TEST_GCS_BUCKET,
-                                                     self.bucket_prefix),
-                    local_file.as_posix()
-                ],  # NotADirectoryError
-                [
-                    "gs://{}/{}/d1/".format(TEST_GCS_BUCKET,
-                                            self.bucket_prefix),
-                    local_dir.as_posix()
-                ],
-                [
-                    "gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
-                    local_dir.as_posix()
-                ],
-                [
-                    "gs://{}/{}/d1/".format(TEST_GCS_BUCKET,
-                                            self.bucket_prefix),
-                    local_dir.as_posix() + '/'
-                ],
-                [
-                    "gs://{}/{}/d1/".format(TEST_GCS_BUCKET,
-                                            self.bucket_prefix),
-                    local_dir.as_posix() + '/'
-                ],
+                ["gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix)
+                    , (local_path / 'uninitialized-file').as_posix()],
+                ["gs://{}/{}/d1/f11".format(TEST_GCS_BUCKET, self.bucket_prefix)
+                    , local_file.as_posix()],
             ]
+            # yapf: enable
 
             gsutil_ls_set = set()
             gcs_ls_set = set()
 
             ls_path = tmp_dir.path.as_posix()
 
-            copy_time_gsutil = 0
-            copy_time_gcs = 0
-            for i, test_case in enumerate(test_cases):
+            for test_case in test_cases:
                 if not local_dir.exists():
                     local_dir = local_path / 'local-dir'
                     local_dir.mkdir()
 
-                print("{}/{} : Testcase: {}".format(i + 1, len(test_cases),
-                                                    test_case))
-                if VERBOSE:
-                    print("gcs start...")
-                start = time.time()
-                try:
-                    call_gcs_client_cp(
-                        client=self.client,
-                        src=test_case[0],
-                        dst=test_case[1],
-                        recursive=False)
-                except NotADirectoryError:
-                    pass
-                end = time.time()
-                copy_time_gcs += end - start
+                self.client.cp(
+                    src=test_case[0], dst=test_case[1], recursive=False)
+
                 gcs_paths = ls_local(path=ls_path)
                 [gcs_ls_set.add(path) for path in gcs_paths]
                 if pathlib.Path(test_case[1]).is_dir():
@@ -1123,13 +983,8 @@ class TestCPDownload(unittest.TestCase):
                     local_dir = local_path / 'local-dir'
                     local_dir.mkdir()
 
-                if VERBOSE:
-                    print("gsutil start...")
-                start = time.time()
                 call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=False)
-                end = time.time()
-                copy_time_gsutil += end - start
                 gsutil_paths = ls_local(path=ls_path)
                 [gsutil_ls_set.add(path) for path in gsutil_paths]
                 if pathlib.Path(test_case[1]).is_dir():
@@ -1137,10 +992,67 @@ class TestCPDownload(unittest.TestCase):
 
                 self.assertListEqual(gsutil_paths, gcs_paths)
 
-            if VERBOSE:
-                print("time gsutil: {}, gcs: {}".format(copy_time_gsutil,
-                                                        copy_time_gcs))
             self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
+
+    def test_gsutil_vs_gswrap_download_non_recursive_check_raises(self):  # pylint: disable=invalid-name
+        # pylint: disable=too-many-locals
+        with temppathlib.TemporaryDirectory() as tmp_dir:
+            local_path = tmp_dir.path / 'tmp'
+            local_path.mkdir()
+            local_file = local_path / 'local-file'
+            local_file.write_text('hello')
+            another_local_file = local_path / 'another-local-file'
+            another_local_file.write_text('hello again')
+            local_dir = local_path / 'local-dir'
+            local_dir.mkdir()
+
+            # yapf: disable
+            test_cases = [
+                ["gs://{}/{}/d3/d31/d311".format(TEST_GCS_BUCKET,
+                                                 self.bucket_prefix),
+                 local_file.as_posix()],  # NotADirectoryError
+                ["gs://{}/{}/d3/d31/d311/".format(TEST_GCS_BUCKET,
+                                                  self.bucket_prefix),
+                 local_file.as_posix()],  # NotADirectoryError
+                ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                 local_dir.as_posix()],
+                ["gs://{}/{}/d1".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                 local_dir.as_posix()],
+                ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                 local_dir.as_posix() + '/'],
+                ["gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+                 local_dir.as_posix() + '/'],
+            ]
+            # yapf: enable
+
+            for test_case in test_cases:
+                if not local_dir.exists():
+                    local_dir = local_path / 'local-dir'
+                    local_dir.mkdir()
+
+                self.assertRaises(
+                    google.api_core.exceptions.GoogleAPIError,
+                    self.client.cp,
+                    src=test_case[0],
+                    dst=test_case[1],
+                    recursive=False)
+
+                if pathlib.Path(test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1], True)
+
+                if not local_dir.exists():
+                    local_dir = local_path / 'local-dir'
+                    local_dir.mkdir()
+
+                self.assertRaises(
+                    subprocess.CalledProcessError,
+                    call_gsutil_cp,
+                    src=test_case[0],
+                    dst=test_case[1],
+                    recursive=False)
+
+                if pathlib.Path(test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1], True)
 
     def test_download_no_clobber(self):
         with temppathlib.TemporaryDirectory() as local_tmpdir:
@@ -1201,66 +1113,93 @@ class TestCPLocal(unittest.TestCase):
             file2.write_text('hi there')
             dst_dir = local_path / 'dst-dir'
             dst_dir.mkdir()
-            test_cases = [[
-                local_file.as_posix(),
-                (local_path / 'another-local-file').as_posix()
-            ], [local_dir.as_posix(), dst_dir.as_posix()]]
 
+            # yapf: disable
+            test_cases = [
+                [local_file.as_posix(), (local_path / 'another-local-file'
+                                         ).as_posix(), True],
+                [local_dir.as_posix(), dst_dir.as_posix(), True],
+                [local_file.as_posix(), (local_path / 'another-local-file'
+                                         ).as_posix(), False]
+            ]
+            # yapf: enable
             gsutil_ls_set = set()
             gcs_ls_set = set()
 
             ls_path = tmp_dir.path.as_posix()
 
-            copy_time_gsutil = 0
-            copy_time_gcs = 0
-            for recursive in [True, False]:
-                for i, test_case in enumerate(test_cases):
-                    print("{}/{} : Testcase: {}, recursive: {}".format(
-                        i + 1, len(test_cases), test_case, recursive))
+            for test_case in test_cases:
+                call_gsutil_cp(
+                    src=test_case[0], dst=test_case[1], recursive=test_case[2])
+                gsutil_paths = ls_local(path=ls_path)
+                [gsutil_ls_set.add(path) for path in gsutil_paths]
+                if pathlib.Path(test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1], True)
+                elif pathlib.Path(test_case[1]).exists():
+                    os.remove(test_case[1])
 
-                    if VERBOSE:
-                        print("gsutil start...")
-                    start = time.time()
-                    call_gsutil_cp(
-                        src=test_case[0], dst=test_case[1], recursive=recursive)
-                    end = time.time()
-                    copy_time_gsutil += end - start
-                    gsutil_paths = ls_local(path=ls_path)
-                    [gsutil_ls_set.add(path) for path in gsutil_paths]
-                    if pathlib.Path(test_case[1]).is_dir():
-                        shutil.rmtree(test_case[1], True)
-                    elif pathlib.Path(test_case[1]).exists():
-                        os.remove(test_case[1])
+                if pathlib.Path(test_case[0]).is_dir() and pathlib.Path(
+                        test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1])
+                self.client.cp(
+                    src=test_case[0], dst=test_case[1], recursive=test_case[2])
 
-                    if VERBOSE:
-                        print("gcs start...")
-                    start = time.time()
-                    try:
-                        if pathlib.Path(test_case[0]).is_dir() and pathlib.Path(
-                                test_case[1]).is_dir():
-                            shutil.rmtree(test_case[1])
-                        call_gcs_client_cp(
-                            client=self.client,
-                            src=test_case[0],
-                            dst=test_case[1],
-                            recursive=recursive)
-                    except NotADirectoryError:
-                        pass
-                    end = time.time()
-                    copy_time_gcs += end - start
-                    gcs_paths = ls_local(path=ls_path)
-                    [gcs_ls_set.add(path) for path in gcs_paths]
-                    if pathlib.Path(test_case[1]).is_dir():
-                        shutil.rmtree(test_case[1], True)
-                    elif pathlib.Path(test_case[1]).exists():
-                        os.remove(test_case[1])
+                gcs_paths = ls_local(path=ls_path)
+                [gcs_ls_set.add(path) for path in gcs_paths]
+                if pathlib.Path(test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1], True)
+                elif pathlib.Path(test_case[1]).exists():
+                    os.remove(test_case[1])
 
-                    self.assertListEqual(gsutil_paths, gcs_paths)
+                self.assertListEqual(gsutil_paths, gcs_paths)
 
-                if VERBOSE:
-                    print("time gsutil: {}, gcs: {}".format(
-                        copy_time_gsutil, copy_time_gcs))
                 self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
+
+    def test_gsutil_vs_gswrap_local_cp_check_raises(self):  # pylint: disable=invalid-name
+        # pylint: disable=too-many-locals
+        # pylint: disable=too-many-statements
+        with temppathlib.TemporaryDirectory() as tmp_dir:
+            local_path = tmp_dir.path / 'tmp'
+            local_path.mkdir()
+            local_file = local_path / 'local-file'
+            local_file.write_text('hello')
+            local_dir = local_path / "local-dir"
+            local_dir.mkdir()
+            file1 = local_dir / "file1"
+            file1.write_text('hello')
+            file2 = local_dir / "file2"
+            file2.write_text('hi there')
+            dst_dir = local_path / 'dst-dir'
+            dst_dir.mkdir()
+
+            test_cases = [[local_dir.as_posix(), dst_dir.as_posix(), False]]
+
+            for test_case in test_cases:
+                self.assertRaises(
+                    subprocess.CalledProcessError,
+                    call_gsutil_cp,
+                    src=test_case[0],
+                    dst=test_case[1],
+                    recursive=test_case[2])
+                if pathlib.Path(test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1], True)
+                elif pathlib.Path(test_case[1]).exists():
+                    os.remove(test_case[1])
+
+                if pathlib.Path(test_case[0]).is_dir() and pathlib.Path(
+                        test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1])
+                self.assertRaises(
+                    ValueError,
+                    self.client.cp,
+                    src=test_case[0],
+                    dst=test_case[1],
+                    recursive=test_case[2])
+
+                if pathlib.Path(test_case[1]).is_dir():
+                    shutil.rmtree(test_case[1], True)
+                elif pathlib.Path(test_case[1]).exists():
+                    os.remove(test_case[1])
 
     def test_cp_local_no_clobber(self):
         with temppathlib.NamedTemporaryFile() as tmp_file1, \
@@ -1287,17 +1226,6 @@ class TestCPLocal(unittest.TestCase):
                 no_clobber=False)
 
             self.assertEqual("hello", tmp_file2.path.read_text())
-
-
-def call_gcs_client_rm(client: gswrap.Client,
-                       gcs_url: str,
-                       recursive: bool = False):
-    try:
-        client.rm(gcs_url=gcs_url, recursive=recursive)
-    except google.api_core.exceptions.GoogleAPIError as err:
-        print(err)
-    except ValueError as valerr:
-        print(valerr)
 
 
 class TestCreateRemove(unittest.TestCase):
@@ -1333,9 +1261,9 @@ class TestCreateRemove(unittest.TestCase):
                 dst='gs://{}/{}/'.format(TEST_GCS_BUCKET, self.bucket_prefix),
                 recursive=True)
 
-            parent = gswrap._GCSPathlib(path=local_tmpdir.path.as_posix(
-            ))._name_of_parent_dir()._convert_to_posix(
-                remove_leading_backslash=True)
+            parent = gswrap._GCSPathlib(
+                path=local_tmpdir.path.as_posix()).name_of_parent().as_posix(
+                    remove_leading_backslash=True)
 
             blobs = self.client.ls(
                 gcs_url='gs://{}/{}/{}'.format(TEST_GCS_BUCKET,
@@ -1349,32 +1277,26 @@ class TestCreateRemove(unittest.TestCase):
                                                self.bucket_prefix, parent),
                 recursive=True)
 
-            blobs_erased = self.client.ls(
+            self.assertRaises(
+                google.api_core.exceptions.GoogleAPIError,
+                self.client.ls,
                 gcs_url='gs://{}/{}/{}'.format(TEST_GCS_BUCKET,
                                                self.bucket_prefix, parent),
                 recursive=True)
-            self.assertEqual(0, len(blobs_erased), "Blobs were not erased.")
 
     def test_gsutil_vs_gswrap_remove_recursive(self):  # pylint: disable=invalid-name
+        # yapf: disable
         test_cases = [
             "gs://{}/{}/d1/d11/f111".format(TEST_GCS_BUCKET,
                                             self.bucket_prefix),
-            "gs://{}/{}/d1/d11".format(
-                TEST_GCS_BUCKET, self.bucket_prefix), "gs://{}/{}/d1/".format(
-                    TEST_GCS_BUCKET, self.bucket_prefix), "gs://{}/{}/d".format(
-                        TEST_GCS_BUCKET,
-                        self.bucket_prefix), "gs://{}/{}/d/".format(
-                            TEST_GCS_BUCKET,
-                            self.bucket_prefix), "gs://{}/{}".format(
-                                TEST_GCS_BUCKET, self.bucket_prefix)
+            "gs://{}/{}/d1/d11".format(TEST_GCS_BUCKET, self.bucket_prefix),
+            "gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
         ]
+        # yapf: enable
 
-        for i, test_case in enumerate(test_cases):
-            print("{}/{} : Testcase: {}".format(i + 1, len(test_cases),
-                                                test_case))
+        for test_case in test_cases:
             gcs_test_setup(prefix=self.bucket_prefix)
-            call_gcs_client_rm(
-                client=self.client, gcs_url=test_case, recursive=True)
+            self.client.rm(gcs_url=test_case, recursive=True)
             list_gcs = call_gsutil_ls(
                 path="gs://{}/{}".format(TEST_GCS_BUCKET, self.bucket_prefix),
                 recursive=True)
@@ -1385,30 +1307,40 @@ class TestCreateRemove(unittest.TestCase):
                 path="gs://{}/{}".format(TEST_GCS_BUCKET, self.bucket_prefix),
                 recursive=True)
 
-            print(sorted(list_gsutil))
-            print(sorted(list_gcs))
             self.assertListEqual(sorted(list_gsutil), sorted(list_gcs))
 
-    def test_gsutil_vs_gswrap_remove_non_recursive(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_remove_recursive_check_raises(self):  # pylint: disable=invalid-name
+        # yapf: disable
         test_cases = [
-            "gs://{}/{}/d1/d11/f111".format(TEST_GCS_BUCKET,
-                                            self.bucket_prefix),
-            "gs://{}/{}/d1/d11".format(
-                TEST_GCS_BUCKET, self.bucket_prefix), "gs://{}/{}/d1/".format(
-                    TEST_GCS_BUCKET, self.bucket_prefix), "gs://{}/{}/d".format(
-                        TEST_GCS_BUCKET,
-                        self.bucket_prefix), "gs://{}/{}/d/".format(
-                            TEST_GCS_BUCKET,
-                            self.bucket_prefix), "gs://{}/{}".format(
-                                TEST_GCS_BUCKET, self.bucket_prefix)
-        ]
+            "gs://{}/{}/d".format(TEST_GCS_BUCKET, self.bucket_prefix),
+            "gs://{}/{}/d/".format(TEST_GCS_BUCKET, self.bucket_prefix),
 
-        for i, test_case in enumerate(test_cases):
-            print("{}/{} : Testcase: {}".format(i + 1, len(test_cases),
-                                                test_case))
+        ]
+        # yapf: enable
+
+        for test_case in test_cases:
             gcs_test_setup(prefix=self.bucket_prefix)
-            call_gcs_client_rm(
-                client=self.client, gcs_url=test_case, recursive=False)
+            self.assertRaises(
+                google.api_core.exceptions.GoogleAPIError,
+                self.client.rm,
+                gcs_url=test_case,
+                recursive=True)
+
+            gcs_test_setup(prefix=self.bucket_prefix)
+            self.assertRaises(
+                subprocess.CalledProcessError,
+                call_gsutil_rm,
+                path=test_case,
+                recursive=True)
+
+    def test_gsutil_vs_gswrap_remove_non_recursive(self):  # pylint: disable=invalid-name
+        # yapf: disable
+        test_cases = ["gs://{}/{}/d1/d11/f111".format(TEST_GCS_BUCKET,
+                                                      self.bucket_prefix)]
+        # yapf: enable
+        for test_case in test_cases:
+            gcs_test_setup(prefix=self.bucket_prefix)
+            self.client.rm(gcs_url=test_case, recursive=False)
             list_gcs = call_gsutil_ls(
                 path="gs://{}/{}".format(TEST_GCS_BUCKET, self.bucket_prefix),
                 recursive=True)
@@ -1419,9 +1351,28 @@ class TestCreateRemove(unittest.TestCase):
                 path="gs://{}/{}".format(TEST_GCS_BUCKET, self.bucket_prefix),
                 recursive=True)
 
-            print(sorted(list_gsutil))
-            print(sorted(list_gcs))
             self.assertListEqual(sorted(list_gsutil), sorted(list_gcs))
+
+    def test_gsutil_vs_gswrap_remove_non_recursive_check_raises(self):  # pylint: disable=invalid-name
+        # yapf: disable
+        test_cases = [
+            "gs://{}/{}/d1/d11".format(TEST_GCS_BUCKET, self.bucket_prefix),
+            "gs://{}/{}/d1/".format(TEST_GCS_BUCKET, self.bucket_prefix),
+            "gs://{}/{}/d".format(TEST_GCS_BUCKET, self.bucket_prefix),
+            "gs://{}/{}/d/".format(TEST_GCS_BUCKET,self.bucket_prefix),
+        ]
+        # yapf: enable
+        for test_case in test_cases:
+            gcs_test_setup(prefix=self.bucket_prefix)
+            self.assertRaises(
+                ValueError, self.client.rm, gcs_url=test_case, recursive=False)
+
+            gcs_test_setup(prefix=self.bucket_prefix)
+            self.assertRaises(
+                subprocess.CalledProcessError,
+                call_gsutil_rm,
+                path=test_case,
+                recursive=False)
 
 
 if __name__ == '__main__':

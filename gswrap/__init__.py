@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Python3 wrapper for gsutil commands."""
+"""Wrapper for gsutil commands using Google Cloud Storage python API."""
 
 # pylint: disable=protected-access
 
@@ -14,10 +14,7 @@ from typing import List, Optional, Union  # pylint: disable=unused-import
 import google.api_core.exceptions
 import google.api_core.page_iterator
 import google.auth.credentials
-# pylint: disable=fixme
-# TODO(snaji): remove 'as storage' when finished
-import google.cloud.storage as storage  # pylint: disable=useless-import-alias
-
+import google.cloud.storage
 import icontract
 
 
@@ -25,23 +22,25 @@ class _GCSPathlib:
     """
     Store path uniformly with information about leading and trailing backslash.
 
+    It can be either local path or a path in Google Cloud Storage bucket.
+
     :ivar path: any path given by the resource location
     :vartype path: pathlib.Path
 
-    :ivar _had_trailing_backslash: True if resource location had a trailing
+    :ivar had_trailing_backslash: True if resource location had a trailing
     backslash
     :vartype had_trailing_backslash: bool
     """
 
     def __init__(self, path: str) -> None:
         """Initialize GCSPathlib."""
-        self._had_trailing_backslash = path.endswith('/')
+        self.had_trailing_backslash = path.endswith('/')
         self._path = pathlib.Path(path)
 
-    def _convert_to_posix(self,
-                          add_trailing_backslash: bool = False,
-                          remove_leading_backslash: bool = False,
-                          is_cloud_url: bool = True) -> str:
+    def as_posix(self,
+                 add_trailing_backslash: bool = False,
+                 remove_leading_backslash: bool = False,
+                 is_cloud_url: bool = True) -> str:
         """Convert path to posix with expected backslashs."""
         posix = self._path.as_posix()
 
@@ -53,25 +52,25 @@ class _GCSPathlib:
         if add_trailing_backslash:
             posix = posix + '/'
 
-        if self._starts_with_backslash() and remove_leading_backslash:
+        if self.starts_with_backslash() and remove_leading_backslash:
             posix = posix[1:]
 
         return posix
 
-    def _starts_with_backslash(self) -> bool:
+    def starts_with_backslash(self) -> bool:
         """Check if path starts with backslash."""
         return self._path.is_absolute()
 
-    def _name_of_parent_dir(self):
+    def name_of_parent(self):
         """Give name of parent directory as GCSPathlib path."""
         gcs_parent = _GCSPathlib(path=self._path.parent.as_posix())
-        return _GCSPathlib(path=self._convert_to_posix().replace(
-            gcs_parent._convert_to_posix(), "", 1))
+        return _GCSPathlib(
+            path=self.as_posix().replace(gcs_parent.as_posix(), "", 1))
 
 
 class _UniformPath:
     """
-    Structure to unify URLs.
+    Class to unify Google Cloud Storage URLs and local paths.
 
     :ivar is_cloud_url: True for Google Cloud URL and False for local paths
     :vartype is_cloud_url: bool
@@ -96,7 +95,7 @@ class _UniformPath:
         else:
             self.is_cloud_url = False
             self.bucket = ""
-            self.prefix = _GCSPathlib(parsed_rec_loc.path)
+            self.prefix = _GCSPathlib(path=parsed_rec_loc.path)
 
 
 _WILDCARDS_RE = re.compile(r'(\*\*|\*|\?|\[[^]]+\])')
@@ -116,7 +115,7 @@ def _contains_wildcard(prefix: str) -> bool:
 def _list_found_blobs(
         iterator: google.api_core.page_iterator.HTTPIterator) -> List[str]:
     """
-    Arrange list of blobs in expected gsutil structure.
+    List files and directories for a given iterator in expected gsutil order.
 
     :param iterator: google.cloud.iterator.HTTPIterator returned from
     google.cloud.storage.bucket.Bucket.list_blobs
@@ -136,49 +135,96 @@ def _list_found_blobs(
     return blob_names
 
 
-def _cp_blob_name_restructure(blob_name: str, src: _UniformPath,
-                              dst: _UniformPath) -> pathlib.Path:
+def _rename_blob(blob_name: str, src: _UniformPath,
+                 dst: _UniformPath) -> pathlib.Path:
     """
-    Restructure destination blob name to achieve gsutil like cp -r behaviour.
+    Rename destination blob name to achieve gsutil like cp -r behaviour.
+
+    Google cloud storage behaves differently for recursive copy commands on
+    Google Cloud.
+    Depending on if the destination path had a trailing
+    backslash the resulting blob name differs.
+    e.g.    gs://your-bucket/your-dir/file
+
+            gsutil cp -r gs://your-bucket/your-dir/ gs://your-bucket/copy-dir/
+            gs://your-bucket/copy-dir/your-dir/file
+
+            gsutil cp -r gs://your-bucket/your-dir/ gs://your-bucket/copy-dir
+            gs://your-bucket/copy-dir/file
 
     :param blob_name: name of the blob which is copied
     :param src: source prefix from where the blob is copied
     :param dst: destination prefix to where the blob should be copied
     :return: new destination blob name
     """
-    src_suffix = _GCSPathlib(
-        path=blob_name[len(src.prefix._convert_to_posix()):])
-    src_suffix_str = src_suffix._convert_to_posix(remove_leading_backslash=True)
+    src_suffix = _GCSPathlib(path=blob_name[len(src.prefix.as_posix()):])
+    src_suffix_str = src_suffix.as_posix(remove_leading_backslash=True)
 
-    if dst.prefix._had_trailing_backslash:
-        src_prefix_parent = src.prefix._name_of_parent_dir()
-        return dst.prefix._path / src_prefix_parent._convert_to_posix(
+    if dst.prefix.had_trailing_backslash:
+        src_prefix_parent = src.prefix.name_of_parent()
+        return dst.prefix._path / src_prefix_parent.as_posix(
             remove_leading_backslash=True) / src_suffix_str
 
     return dst.prefix._path / src_suffix_str
 
 
+def threadpool_failure_check(futures: List[concurrent.futures.Future],
+                             operation_name: str) -> None:
+    """
+    Check that none of the futures fails and throws an exception.
+
+    Always when using multithreading this check is needed to ensure that no
+    thread failed during a operation.
+
+    :param futures: List of threads
+    :param operation_name: Name of the operation that uses multithreading
+    :return:
+    """
+    exception_string = ""
+    failure_count = 0
+    max_printed_failure_count = 10000
+    for future in futures:
+        # pylint: disable-msg=broad-except
+        try:
+            future.result()
+        except Exception as ex:
+            failure_count += 1
+            if failure_count < max_printed_failure_count:
+                exception_string += "{}\n".format(ex)
+
+    if failure_count != 0:
+        if failure_count >= max_printed_failure_count:
+            raise RuntimeError(
+                "{} threads {} the files failed. First {} error messages are: "
+                "{}".format(failure_count, operation_name,
+                            max_printed_failure_count, exception_string))
+        else:
+            raise RuntimeError(
+                "{} threads {} the files failed. The error messages are: "
+                "{}".format(failure_count, operation_name, exception_string))
+
+
 class Client:
     """Google Cloud Storage Client for simple usage of gsutil commands."""
 
-    # TODO(snaji): maybe add credentials
-    def __init__(self, bucket_name: Optional[str] = None,
-                 project: str = None) -> None:
+    def __init__(self,
+                 bucket_name: Optional[str] = None,
+                 project: Optional[str] = None) -> None:
         """
         Initialize.
 
         :param bucket_name: name of the active bucket
         :param project: the project which the client acts on behalf of. Will
-        be passed when creating a topic. If not passed, falls back to the
+        be passed when creating a topic. If None, falls back to the
         default inferred from the environment.
         """
-        self._client = storage.Client(project=project)
+        self._client = google.cloud.storage.Client(project=project)
         if bucket_name:
             self._bucket = self._client.get_bucket(bucket_name=bucket_name)
         else:
             self._bucket = None
 
-    def _change_bucket(self, bucket_name: str):
+    def _change_bucket(self, bucket_name: str) -> None:
         """
         Change active bucket.
 
@@ -192,6 +238,10 @@ class Client:
     def ls(self, gcs_url: str, recursive: bool = False) -> List[str]:  # pylint: disable=invalid-name
         """
         List the files on Google Cloud Storage given the prefix.
+
+        Functionality is the same as "gsutil ls (-r)" command. Except that no
+        wildcards are allowed. For more information about "gsutil ls" check out:
+        https://cloud.google.com/storage/docs/gsutil/commands/ls
 
         :param gcs_url: Google cloud storage URL
         :param recursive: List only direct subdirectories
@@ -223,10 +273,9 @@ class Client:
             delimiter = ''
         else:
             delimiter = '/'
-
         # add trailing backslash to limit search to this file/folder
         # Google Cloud Storage prefix have no leading backslash
-        prefix = url.prefix._convert_to_posix(
+        prefix = url.prefix.as_posix(
             add_trailing_backslash=True,
             remove_leading_backslash=url.is_cloud_url)
         self._change_bucket(bucket_name=url.bucket)
@@ -234,6 +283,12 @@ class Client:
             versions=True, prefix=prefix, delimiter=delimiter)
 
         blob_names = _list_found_blobs(iterator=iterator)
+
+        if not blob_names:
+            raise google.api_core.exceptions.GoogleAPIError(
+                'URL: {} matched no objects'.format(
+                    url.prefix.as_posix(add_trailing_backslash=url.prefix.
+                                        had_trailing_backslash)))
 
         return blob_names
 
@@ -285,18 +340,27 @@ class Client:
                 recursive=recursive,
                 no_clobber=no_clobber)
         else:
-            if not no_clobber or not dst_url.prefix._path.exists():
-                if src_url.prefix._path.is_file():
-                    shutil.copy(src, dst)
-                elif src_url.prefix._path.is_dir() and recursive:
-                    parent = src_url.prefix._name_of_parent_dir()
-                    shutil.copytree(
-                        src, (dst_url.prefix._path / parent._convert_to_posix(
-                            remove_leading_backslash=True)).as_posix())
-                else:
-                    raise ValueError(
-                        "Cannot copy {} to {} (Did you mean to do cp "
-                        "recursive?)".format(src, dst))
+            # both local
+            if no_clobber and dst_url.prefix._path.exists():
+                # exists, do not overwrite
+                return
+
+            if not src_url.prefix._path.exists():
+                raise ValueError("Source doesn't exist. Cannot copy {} to {}"
+                                 "".format(src, dst))
+
+            if src_url.prefix._path.is_file():
+                shutil.copy(src, dst)
+            elif src_url.prefix._path.is_dir():
+                if not recursive:
+                    raise ValueError("Cannot copy {} to {} (Did you mean to do "
+                                     "cp recursive?)".format(src, dst))
+
+                parent = src_url.prefix.name_of_parent()
+                shutil.copytree(
+                    src,
+                    (dst_url.prefix._path /
+                     parent.as_posix(remove_leading_backslash=True)).as_posix())
 
     def _cp(self,
             src: _UniformPath,
@@ -312,54 +376,58 @@ class Client:
         :param no_clobber: if true don't overwrite files which already exist
         """
         # pylint: disable=too-many-locals
-        if recursive:
-            delimiter = ''
-        else:
-            delimiter = '/'
-
-        self._change_bucket(bucket_name=src.bucket)
-        src_bucket = self._bucket
-        dst_bucket = self._client.get_bucket(bucket_name=dst.bucket)
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            src_prefix = src.prefix._convert_to_posix(
-                remove_leading_backslash=True)
+            src_prefix = src.prefix.as_posix(remove_leading_backslash=True)
 
+            if recursive:
+                delimiter = ''
+            else:
+                delimiter = '/'
+            self._change_bucket(bucket_name=src.bucket)
+            src_bucket = self._bucket
             list_of_blobs = list(
                 src_bucket.list_blobs(prefix=src_prefix, delimiter=delimiter))
 
-            if not recursive and len(list_of_blobs) > 1:
+            if not list_of_blobs:
+                raise google.api_core.exceptions.GoogleAPIError(
+                    'No URLs matched')
+
+            src_is_dir = len(list_of_blobs) > 1
+            if not recursive and src_is_dir:
                 raise ValueError(
                     "Cannot copy gs://{}/{} to gs://{}/{} (Did you mean to do "
                     "cp recursive?)".format(
                         src.bucket,
-                        src.prefix._convert_to_posix(
+                        src.prefix.as_posix(
                             add_trailing_backslash=src.prefix.
-                            _had_trailing_backslash,
+                            had_trailing_backslash,
                             remove_leading_backslash=True), dst.bucket,
-                        dst.prefix._convert_to_posix(
+                        dst.prefix.as_posix(
                             add_trailing_backslash=dst.prefix.
-                            _had_trailing_backslash,
+                            had_trailing_backslash,
                             remove_leading_backslash=True)))
 
+            dst_bucket = self._client.get_bucket(bucket_name=dst.bucket)
             for blob in list_of_blobs:
                 new_name = _GCSPathlib(
-                    path=_cp_blob_name_restructure(
-                        blob_name=blob.name, src=src, dst=dst).as_posix())
+                    path=_rename_blob(blob_name=blob.name, src=src, dst=dst).
+                    as_posix())
 
                 # skip already existing blobs to not overwrite them
+                blob_name = new_name.as_posix(remove_leading_backslash=True)
                 if no_clobber and dst_bucket.get_blob(
-                        blob_name=new_name._convert_to_posix(
-                            remove_leading_backslash=True)) is not None:
+                        blob_name=blob_name) is not None:
                     continue
 
                 copy_thread = executor.submit(
                     src_bucket.copy_blob,
                     blob=blob,
                     destination_bucket=dst_bucket,
-                    new_name=new_name._convert_to_posix(
-                        remove_leading_backslash=True))
+                    new_name=blob_name)
                 futures.append(copy_thread)
+
+            threadpool_failure_check(futures=futures, operation_name='cp')
 
     def _upload(self,
                 src: _UniformPath,
@@ -384,32 +452,27 @@ class Client:
             src_is_file = True
         elif recursive:
             src_is_file = False
+            src_prefix = src.prefix.as_posix(is_cloud_url=src.is_cloud_url)
             # pylint: disable=unused-variable
-            for root, dirs, files in os.walk(
-                    src.prefix._convert_to_posix(
-                        is_cloud_url=src.is_cloud_url)):
-                if files:
-                    for file in files:
-                        path = os.path.join(root, file)
-                        prefix = _GCSPathlib(
-                            path=str(path).replace(
-                                src.prefix._convert_to_posix(
-                                    is_cloud_url=src.is_cloud_url), ''))
-                        upload_files.append(
-                            prefix._convert_to_posix(
-                                remove_leading_backslash=True,
-                                is_cloud_url=src.is_cloud_url))
+            for root, dirs, files in os.walk(src_prefix):
+                for file in files:
+                    path = os.path.join(root, file)
+                    prefix = _GCSPathlib(path=str(path).replace(src_prefix, ''))
+                    upload_files.append(
+                        prefix.as_posix(
+                            remove_leading_backslash=True,
+                            is_cloud_url=src.is_cloud_url))
         else:
             raise ValueError(
                 "Cannot upload {} to gs://{}/{} (Did you mean to do cp "
                 "recursive?)".format(
-                    src.prefix._convert_to_posix(
+                    src.prefix.as_posix(
                         add_trailing_backslash=src.prefix.
-                        _had_trailing_backslash,
+                        had_trailing_backslash,
                         remove_leading_backslash=True), dst.bucket,
-                    dst.prefix._convert_to_posix(
+                    dst.prefix.as_posix(
                         add_trailing_backslash=dst.prefix.
-                        _had_trailing_backslash,
+                        had_trailing_backslash,
                         remove_leading_backslash=True)))
 
         self._change_bucket(bucket_name=dst.bucket)
@@ -418,19 +481,19 @@ class Client:
         with concurrent.futures.ThreadPoolExecutor() as executor:
             for file in upload_files:
                 # pathlib can't join paths when second part starts with '/'
-                file = _GCSPathlib(path=file)._convert_to_posix(
+                file = _GCSPathlib(path=file).as_posix(
                     remove_leading_backslash=True)
 
-                if src_is_file and not dst.prefix._had_trailing_backslash:
+                dst_is_file = not dst.prefix.had_trailing_backslash
+                if src_is_file and dst_is_file:
                     blob_name = dst.prefix._path
                 else:
                     blob_name = dst.prefix._path
-                    if dst.prefix._had_trailing_backslash and not src_is_file:
+                    if not dst_is_file and not src_is_file:
 
-                        parent = src.prefix._name_of_parent_dir()
+                        parent = src.prefix.name_of_parent()
                         # remove / for path concatenation
-                        parent = parent._convert_to_posix(
-                            remove_leading_backslash=True)
+                        parent = parent.as_posix(remove_leading_backslash=True)
                         blob_name = blob_name / parent / file
                     else:
                         blob_name = blob_name / file
@@ -438,19 +501,19 @@ class Client:
                 gcs_blob_name = _GCSPathlib(path=blob_name.as_posix())
 
                 # skip already existing blobs to not overwrite them
+                new_name = gcs_blob_name.as_posix(remove_leading_backslash=True)
                 if no_clobber and bucket.get_blob(
-                        blob_name=gcs_blob_name._convert_to_posix(
-                            remove_leading_backslash=True)) is not None:
+                        blob_name=new_name) is not None:
                     continue
 
-                blob = bucket.blob(
-                    blob_name=gcs_blob_name._convert_to_posix(
-                        remove_leading_backslash=True))
+                blob = bucket.blob(blob_name=new_name)
 
                 file_name = src.prefix._path / file
                 upload_thread = executor.submit(
                     blob.upload_from_filename, filename=file_name.as_posix())
                 futures.append(upload_thread)
+
+            threadpool_failure_check(futures=futures, operation_name='upload')
 
     def _download(self,
                   src: _UniformPath,
@@ -466,6 +529,16 @@ class Client:
         :param no_clobber: if yes don't overwrite files which already exist
         """
         # pylint: disable=too-many-locals
+        if not dst.prefix._path.exists():
+            dst.prefix._path.write_text("create file")
+
+        src_prefix_parent = src.prefix._path
+        src_prefix_parent = src_prefix_parent.parent
+        src_gcs_prefix_parent = _GCSPathlib(path=src_prefix_parent.as_posix())
+        src_gcs_prefix_parent_str = src_gcs_prefix_parent.as_posix(
+            remove_leading_backslash=True)
+        parent_dir_set = set()
+
         if recursive:
             delimiter = ''
         else:
@@ -474,24 +547,21 @@ class Client:
         self._change_bucket(bucket_name=src.bucket)
         bucket = self._bucket
 
-        if not dst.prefix._path.exists():
-            dst.prefix._path.write_text("create file")
+        list_of_blobs = list(
+            bucket.list_blobs(
+                prefix=src.prefix.as_posix(remove_leading_backslash=True),
+                delimiter=delimiter))
 
-        src_prefix_parent = src.prefix._path
-        src_prefix_parent = src_prefix_parent.parent
-        src_gcs_prefix_parent = _GCSPathlib(path=src_prefix_parent.as_posix())
-        parent_dir_set = set()
-        for blob in bucket.list_blobs(
-                prefix=src.prefix._convert_to_posix(
-                    remove_leading_backslash=True),
-                delimiter=delimiter):
+        if not list_of_blobs:
+            raise google.api_core.exceptions.GoogleAPIError('No URLs matched')
+
+        for blob in list_of_blobs:
             blob_path = _GCSPathlib(path=blob.name)
             parent = blob_path._path.parent
             parent_str = parent.as_posix()
             parent_str = parent_str.replace(
-                src_gcs_prefix_parent._convert_to_posix(
-                    remove_leading_backslash=True),
-                dst.prefix._convert_to_posix(is_cloud_url=dst.is_cloud_url))
+                src_gcs_prefix_parent_str,
+                dst.prefix.as_posix(is_cloud_url=dst.is_cloud_url))
             parent_dir_set.add(parent_str)
 
         parent_dir_list = sorted(parent_dir_set)
@@ -502,17 +572,12 @@ class Client:
 
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            for file in bucket.list_blobs(
-                    prefix=src.prefix._convert_to_posix(
-                        remove_leading_backslash=True),
-                    delimiter=delimiter):
+            for file in list_of_blobs:
                 file_path = file.name
                 file_name = _GCSPathlib(
-                    path=file_path.replace(
-                        src_gcs_prefix_parent._convert_to_posix(
-                            remove_leading_backslash=True), ''))
+                    path=file_path.replace(src_gcs_prefix_parent_str, ''))
                 # pathlib can't join paths when the second part starts with '/'
-                file_name_str = file_name._convert_to_posix(
+                file_name_str = file_name.as_posix(
                     remove_leading_backslash=True)
 
                 if dst.prefix._path.is_file():
@@ -528,6 +593,8 @@ class Client:
                     file.download_to_filename, filename=filename)
                 futures.append(download_thread)
 
+            threadpool_failure_check(futures=futures, operation_name='download')
+
     @icontract.require(
         lambda self, gcs_url: not _contains_wildcard(prefix=gcs_url))
     def rm(self, gcs_url: str, recursive: bool = False) -> None:  # pylint: disable=invalid-name
@@ -537,11 +604,7 @@ class Client:
         :param gcs_url: google cloud storage URL
         :param recursive: if yes remove files within folders
         """
-        if recursive:
-            delimiter = ''
-        else:
-            delimiter = '/'
-
+        # pylint: disable=too-many-branches
         url = _UniformPath(res_loc=gcs_url)
 
         if not url.is_cloud_url:
@@ -553,8 +616,8 @@ class Client:
         try:
             futures = []  # type: List[concurrent.futures.Future]
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                blob_prefix = url.prefix._convert_to_posix(
-                    add_trailing_backslash=url.prefix._had_trailing_backslash,
+                blob_prefix = url.prefix.as_posix(
+                    add_trailing_backslash=url.prefix.had_trailing_backslash,
                     remove_leading_backslash=True)
                 blob = bucket.get_blob(blob_name=blob_prefix)
                 if not recursive:
@@ -563,25 +626,38 @@ class Client:
                             "No URL matched. Cannot remove gs://{}/{} "
                             "(Did you mean to do rm recursive?)".format(
                                 url.bucket,
-                                url.prefix._convert_to_posix(
+                                url.prefix.as_posix(
                                     add_trailing_backslash=url.prefix.
-                                    _had_trailing_backslash,
+                                    had_trailing_backslash,
                                     remove_leading_backslash=True)))
                     else:
                         list_of_blobs = [blob]
                 else:
+                    if recursive:
+                        delimiter = ''
+                    else:
+                        delimiter = '/'
                     list_of_blobs = list(
                         bucket.list_blobs(
-                            prefix=url.prefix._convert_to_posix(
+                            prefix=url.prefix.as_posix(
                                 add_trailing_backslash=True,
                                 remove_leading_backslash=True),
                             delimiter=delimiter))
                     if blob is not None:
                         list_of_blobs.append(blob)
 
+                if not list_of_blobs:
+                    raise google.api_core.exceptions.GoogleAPIError(
+                        'No URLs matched')
+
                 for blob in list_of_blobs:
                     delete_thread = executor.submit(
                         bucket.delete_blob(blob_name=blob.name))
                     futures.append(delete_thread)
+
+                for blob in list_of_blobs:
+                    if blob.exists():
+                        raise ValueError('Blob was not deleted')
+
         except google.api_core.exceptions.NotFound:
             pass

@@ -1,31 +1,83 @@
-gs-wrap
-=======
+gswrap
+======
 
 Python3 wrapper for gsutil commands
 
 Usage
 =====
+
+* Connect to your Google Cloud Storage bucket
+
 .. code-block:: python
 
-    import gs_wrap
+    import gswrap
+
+    client = gswrap.Client()
+
+* List objects in your bucket
+
+.. code-block:: python
+
+    client.ls(gcs_url="gs://your-bucket/your-dir", recursive=False)
+    # gs://your-bucket/your-dir/your-subdir1
+    # gs://your-bucket/your-dir/your-subdir2
+    # gs://your-bucket/your-dir/file1
+
+    client.ls(gcs_url="gs://your-bucket/your-dir", recursive=True)
+    # gs://your-bucket/your-dir/your-subdir1/file1
+    # gs://your-bucket/your-dir/your-subdir2/file1
+    # gs://your-bucket/your-dir/file1
+
+* Copy objects in Google Cloud Storage
+
+.. code-block:: python
+
+    client.cp(src="gs://your-bucket/file1", dst="gs://your-bucket/your-dir/",
+    recursive=True)
+    # client.ls("gs://your-bucket/", recursive=True):
+    # gs://your-bucket/file1
+    # gs://your-bucket/your-dir/file1
+
+    client.cp(src="gs://your-bucket/file1", dst="gs://your-backup-bucket/backup-file1",
+    recursive=False)
+    # client.ls("gs://your-backup-bucket/"):
+    # gs://your-backup-bucket/backup-file1
+
+* Upload objects to Google Cloud Storage
+
+.. code-block:: python
+
+    # local directory:
+    # /home/user/storage/file1
+    # /home/user/storage/file2
+
+    client.cp(src="/home/user/storage/", dst="gs://your-bucket/local/",
+    recursive=True)
+    # client.ls("gs://your-bucket/", recursive=True):
+    # gs://your-bucket/local/storage/file1
+    # gs://your-bucket/local/storage/file2
+
+* Download objects from Google Cloud Storage
+
+.. code-block:: python
+
+    import os
+
+    os.stat("/home/user/storage/file1").st_mtime # 1537947563
+
+    client.cp(src="gs://your-bucket/file1", dst="/home/user/storage/file1",
+    no_clobber=True)
+
+    # no_clobber option stops from overwriting
+    os.stat("/home/user/storage/file1").st_mtime # 1537947563
+
+    client.cp(src="gs://your-bucket/file1", dst="/home/user/storage/file1",
+    no_clobber=False)
+
+    os.stat("/home/user/storage/file1").st_mtime # 1540889799
 
 Installation
 ============
-
-
-* Create a virtual environment:
-
-.. code-block:: bash
-
-    python3 -m venv venv3
-
-
-* Activate it:
-
-.. code-block:: bash
-
-    source venv3/bin/activate
-
 
 * Install gs-wrap with pip:
 
