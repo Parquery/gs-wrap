@@ -9,7 +9,7 @@ import pathlib
 import re
 import shutil
 import urllib.parse
-from typing import List, Optional, Union  # pylint: disable=unused-import
+from typing import List, Optional  # pylint: disable=unused-import
 
 import google.api_core.exceptions
 import google.api_core.page_iterator
@@ -112,7 +112,7 @@ def _contains_wildcard(prefix: str) -> bool:
     return match_object is not None
 
 
-def _list_found_blobs(
+def _list_blobs(
         iterator: google.api_core.page_iterator.HTTPIterator) -> List[str]:
     """
     List files and directories for a given iterator in expected gsutil order.
@@ -140,11 +140,10 @@ def _rename_blob(blob_name: str, src: _UniformPath,
     """
     Rename destination blob name to achieve gsutil like cp -r behaviour.
 
-    Google cloud storage behaves differently for recursive copy commands on
-    Google Cloud.
-    Depending on if the destination path had a trailing
-    backslash the resulting blob name differs.
-    e.g.    gs://your-bucket/your-dir/file
+    Gsutil behavior for recursive copy commands on Google cloud depends on
+    trailing backslash.
+    e.g.    Existing blob on Google Cloud
+            gs://your-bucket/your-dir/file
 
             gsutil cp -r gs://your-bucket/your-dir/ gs://your-bucket/copy-dir/
             gs://your-bucket/copy-dir/your-dir/file
@@ -166,42 +165,6 @@ def _rename_blob(blob_name: str, src: _UniformPath,
             remove_leading_backslash=True) / src_suffix_str
 
     return dst.prefix._path / src_suffix_str
-
-
-def threadpool_failure_check(futures: List[concurrent.futures.Future],
-                             operation_name: str) -> None:
-    """
-    Check that none of the futures fails and throws an exception.
-
-    Always when using multithreading this check is needed to ensure that no
-    thread failed during a operation.
-
-    :param futures: List of threads
-    :param operation_name: Name of the operation that uses multithreading
-    :return:
-    """
-    exception_string = ""
-    failure_count = 0
-    max_printed_failure_count = 10000
-    for future in futures:
-        # pylint: disable-msg=broad-except
-        try:
-            future.result()
-        except Exception as ex:
-            failure_count += 1
-            if failure_count < max_printed_failure_count:
-                exception_string += "{}\n".format(ex)
-
-    if failure_count != 0:
-        if failure_count >= max_printed_failure_count:
-            raise RuntimeError(
-                "{} threads {} the files failed. First {} error messages are: "
-                "{}".format(failure_count, operation_name,
-                            max_printed_failure_count, exception_string))
-        else:
-            raise RuntimeError(
-                "{} threads {} the files failed. The error messages are: "
-                "{}".format(failure_count, operation_name, exception_string))
 
 
 class Client:
@@ -228,9 +191,9 @@ class Client:
         """
         Change active bucket.
 
-        :param bucket_name: Name of the to activate bucket
+        :param bucket_name: name of the bucket to activate
         """
-        if not self._bucket or bucket_name != self._bucket.name:
+        if self._bucket is None or bucket_name != self._bucket.name:
             self._bucket = self._client.get_bucket(bucket_name=bucket_name)
 
     @icontract.require(
@@ -275,14 +238,21 @@ class Client:
             delimiter = '/'
         # add trailing backslash to limit search to this file/folder
         # Google Cloud Storage prefix have no leading backslash
-        prefix = url.prefix.as_posix(
-            add_trailing_backslash=True,
+        raw_prefix = url.prefix.as_posix(
+            add_trailing_backslash=url.prefix.had_trailing_backslash,
             remove_leading_backslash=url.is_cloud_url)
+
         self._change_bucket(bucket_name=url.bucket)
+        is_not_blob = raw_prefix == "" or self._bucket.get_blob(
+            blob_name=raw_prefix) is None
+
+        prefix = url.prefix.as_posix(
+            add_trailing_backslash=is_not_blob,
+            remove_leading_backslash=url.is_cloud_url)
         iterator = self._bucket.list_blobs(
             versions=True, prefix=prefix, delimiter=delimiter)
 
-        blob_names = _list_found_blobs(iterator=iterator)
+        blob_names = _list_blobs(iterator=iterator)
 
         if not blob_names:
             raise google.api_core.exceptions.GoogleAPIError(
@@ -292,9 +262,9 @@ class Client:
 
         return blob_names
 
-    # pylint: disable=invalid-name
     @icontract.require(lambda self, src: not _contains_wildcard(prefix=src))
     @icontract.require(lambda self, dst: not _contains_wildcard(prefix=dst))
+    # pylint: disable=invalid-name
     def cp(self,
            src: str,
            dst: str,
@@ -356,11 +326,9 @@ class Client:
                     raise ValueError("Cannot copy {} to {} (Did you mean to do "
                                      "cp recursive?)".format(src, dst))
 
-                parent = src_url.prefix.name_of_parent()
-                shutil.copytree(
-                    src,
-                    (dst_url.prefix._path /
-                     parent.as_posix(remove_leading_backslash=True)).as_posix())
+                shutil.copytree(src, dst_url.prefix._path.as_posix())
+
+    # pylint: enable=invalid-name
 
     def _cp(self,
             src: _UniformPath,
@@ -427,7 +395,8 @@ class Client:
                     new_name=blob_name)
                 futures.append(copy_thread)
 
-            threadpool_failure_check(futures=futures, operation_name='cp')
+        for future in futures:
+            future.result()
 
     def _upload(self,
                 src: _UniformPath,
@@ -513,7 +482,8 @@ class Client:
                     blob.upload_from_filename, filename=file_name.as_posix())
                 futures.append(upload_thread)
 
-            threadpool_failure_check(futures=futures, operation_name='upload')
+        for future in futures:
+            future.result()
 
     def _download(self,
                   src: _UniformPath,
@@ -593,7 +563,8 @@ class Client:
                     file.download_to_filename, filename=filename)
                 futures.append(download_thread)
 
-            threadpool_failure_check(futures=futures, operation_name='download')
+        for future in futures:
+            future.result()
 
     @icontract.require(
         lambda self, gcs_url: not _contains_wildcard(prefix=gcs_url))
@@ -604,7 +575,6 @@ class Client:
         :param gcs_url: google cloud storage URL
         :param recursive: if yes remove files within folders
         """
-        # pylint: disable=too-many-branches
         url = _UniformPath(res_loc=gcs_url)
 
         if not url.is_cloud_url:
@@ -613,51 +583,44 @@ class Client:
         self._change_bucket(bucket_name=url.bucket)
         bucket = self._bucket
 
-        try:
-            futures = []  # type: List[concurrent.futures.Future]
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                blob_prefix = url.prefix.as_posix(
-                    add_trailing_backslash=url.prefix.had_trailing_backslash,
-                    remove_leading_backslash=True)
-                blob = bucket.get_blob(blob_name=blob_prefix)
-                if not recursive:
-                    if blob is None:
-                        raise ValueError(
-                            "No URL matched. Cannot remove gs://{}/{} "
-                            "(Did you mean to do rm recursive?)".format(
-                                url.bucket,
-                                url.prefix.as_posix(
-                                    add_trailing_backslash=url.prefix.
-                                    had_trailing_backslash,
-                                    remove_leading_backslash=True)))
-                    else:
-                        list_of_blobs = [blob]
-                else:
-                    if recursive:
-                        delimiter = ''
-                    else:
-                        delimiter = '/'
-                    list_of_blobs = list(
-                        bucket.list_blobs(
-                            prefix=url.prefix.as_posix(
-                                add_trailing_backslash=True,
-                                remove_leading_backslash=True),
-                            delimiter=delimiter))
-                    if blob is not None:
-                        list_of_blobs.append(blob)
+        blob_prefix = url.prefix.as_posix(
+            add_trailing_backslash=url.prefix.had_trailing_backslash,
+            remove_leading_backslash=True)
+        blob = bucket.get_blob(blob_name=blob_prefix)
+        if not recursive:
+            if blob is None:
+                raise ValueError("No URL matched. Cannot remove gs://{}/{} "
+                                 "(Did you mean to do rm recursive?)".format(
+                                     url.bucket,
+                                     url.prefix.as_posix(
+                                         add_trailing_backslash=url.prefix.
+                                         had_trailing_backslash,
+                                         remove_leading_backslash=True)))
+            else:
+                list_of_blobs = [blob]
+        else:
+            if recursive:
+                delimiter = ''
+            else:
+                delimiter = '/'
+            list_of_blobs = list(
+                bucket.list_blobs(
+                    prefix=url.prefix.as_posix(
+                        add_trailing_backslash=True,
+                        remove_leading_backslash=True),
+                    delimiter=delimiter))
+            if blob is not None:
+                list_of_blobs.append(blob)
 
-                if not list_of_blobs:
-                    raise google.api_core.exceptions.GoogleAPIError(
-                        'No URLs matched')
+        if not list_of_blobs:
+            raise google.api_core.exceptions.NotFound('No URLs matched')
 
-                for blob in list_of_blobs:
-                    delete_thread = executor.submit(
-                        bucket.delete_blob(blob_name=blob.name))
-                    futures.append(delete_thread)
+        futures = []  # type: List[concurrent.futures.Future]
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            for blob_to_delete in list_of_blobs:
+                delete_thread = executor.submit(
+                    bucket.delete_blob, blob_name=blob_to_delete.name)
+                futures.append(delete_thread)
 
-                for blob in list_of_blobs:
-                    if blob.exists():
-                        raise ValueError('Blob was not deleted')
-
-        except google.api_core.exceptions.NotFound:
-            pass
+        for future in futures:
+            future.result()

@@ -6,8 +6,6 @@ import pathlib
 import subprocess
 import sys
 
-# TODO: run precommit
-
 
 def main() -> int:
     """"

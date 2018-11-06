@@ -11,7 +11,6 @@ import gswrap
 
 class TestGCSPathlib(unittest.TestCase):
     def test_path_as_posix(self):
-        # pylint: disable=invalid-name
         local_file_pth = gswrap._GCSPathlib(path='/home/user/file')
         local_dir_pth = gswrap._GCSPathlib(path='/home/user/dir')
         local_cwd = gswrap._GCSPathlib(path='')
@@ -36,7 +35,6 @@ class TestGCSPathlib(unittest.TestCase):
         self.assertEqual('/', local_root.as_posix(is_cloud_url=False))
 
     def test_gcs_url_as_posix(self):
-        # pylint: disable=invalid-name
         gcs_prefix_no_trailing_backslash = gswrap._GCSPathlib(
             path='dir-in-bucket/sub-dir')
         gcs_prefix_trailing_backslash = gswrap._GCSPathlib(
@@ -133,7 +131,7 @@ class TestGSwrapFunctions(unittest.TestCase):
 
     def test_local_url_decomposition(self):
         bucket = ''
-        prefix = '/user/home/'
+        prefix = '/home/user/'
         link = prefix
         url = gswrap._UniformPath(res_loc=link)
 
