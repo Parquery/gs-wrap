@@ -400,7 +400,8 @@ class Client:
             self._change_bucket(bucket_name=src.bucket)
             src_bucket = self._bucket
 
-            first_page = src_bucket.list_blobs(prefix=src_prefix, delimiter=delimiter)._next_page()
+            first_page = src_bucket.list_blobs(
+                prefix=src_prefix, delimiter=delimiter)._next_page()
             num_items = first_page.num_items
             if num_items == 0:
                 raise google.api_core.exceptions.GoogleAPIError(
@@ -414,7 +415,8 @@ class Client:
                                             dst.prefix))
 
             dst_bucket = self._client.get_bucket(bucket_name=dst.bucket)
-            blobs_iterator = src_bucket.list_blobs(prefix=src_prefix, delimiter=delimiter)
+            blobs_iterator = src_bucket.list_blobs(
+                prefix=src_prefix, delimiter=delimiter)
             for blob in blobs_iterator:
                 blob_name = _rename_destination_blob(
                     blob_name=blob.name, src=src, dst=dst).as_posix()
@@ -565,13 +567,14 @@ class Client:
         if src.prefix.endswith('/'):
             src_prefix = src_prefix[:-1]
 
-        first_page = bucket.list_blobs(prefix=src_prefix, delimiter=delimiter)._next_page()
+        first_page = bucket.list_blobs(
+            prefix=src_prefix, delimiter=delimiter)._next_page()
         num_items = first_page.num_items
         if num_items == 0:
             raise google.api_core.exceptions.GoogleAPIError('No URLs matched')
 
-        blob_dir_iterator = bucket.list_blobs(prefix=src_prefix,
-                                              delimiter=delimiter)
+        blob_dir_iterator = bucket.list_blobs(
+            prefix=src_prefix, delimiter=delimiter)
         for blob in blob_dir_iterator:
             blob_path = pathlib.Path(blob.name)
             parent = blob_path.parent
@@ -585,7 +588,8 @@ class Client:
             if not needed_dirs.is_file():
                 needed_dirs.mkdir(parents=True, exist_ok=True)
 
-        blob_iterator = bucket.list_blobs(prefix=src_prefix, delimiter=delimiter)
+        blob_iterator = bucket.list_blobs(
+            prefix=src_prefix, delimiter=delimiter)
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
@@ -653,12 +657,13 @@ class Client:
             if not gcs_url_prefix.endswith('/'):
                 gcs_url_prefix = gcs_url_prefix + '/'
 
-            first_page = bucket.list_blobs(prefix=gcs_url_prefix, delimiter=delimiter)._next_page()
+            first_page = bucket.list_blobs(
+                prefix=gcs_url_prefix, delimiter=delimiter)._next_page()
             if first_page.num_items == 0:
                 raise google.api_core.exceptions.NotFound('No URLs matched')
 
-            blob_iterator = bucket.list_blobs(prefix=gcs_url_prefix,
-                                              delimiter=delimiter)
+            blob_iterator = bucket.list_blobs(
+                prefix=gcs_url_prefix, delimiter=delimiter)
             futures = []  # type: List[concurrent.futures.Future]
             with concurrent.futures.ThreadPoolExecutor(
                     max_workers=max_workers) as executor:
