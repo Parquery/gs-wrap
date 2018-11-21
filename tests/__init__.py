@@ -1,1 +1,1 @@
-"""Test gs-wrap."""
+"""Test gswrap."""

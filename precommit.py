@@ -5,6 +5,7 @@ import os
 import pathlib
 import subprocess
 import sys
+from typing import List  # pylint: disable=unused-imports
 
 
 def main() -> int:
@@ -41,6 +42,29 @@ def main() -> int:
 
     print("Mypy'ing...")
     subprocess.check_call(["mypy", "gswrap", "tests"], cwd=repo_root.as_posix())
+
+    print("Isort'ing...")
+    isort_files = []  # type: List[str]
+    for path in (repo_root / "gswrap").glob("**/*.py"):
+        isort_files.append(path.as_posix())
+    for path in (repo_root / "tests").glob("**/*.py"):
+        isort_files.append(path.as_posix())
+
+    if overwrite:
+        cmd = [
+            "isort", "--balanced", "--multi-line", "4", "--line-width", "80",
+            "--dont-skip", "__init__.py", "--project", "gswrap"
+        ]
+        cmd.extend(isort_files)
+        subprocess.check_call(cmd)
+    else:
+        cmd = [
+            "isort", "--check-only", "--diff", "--balanced", "--multi-line",
+            "4", "--line-width", "80", "--dont-skip", "__init__.py",
+            "--project", "gswrap"
+        ]
+        cmd.extend(isort_files)
+        subprocess.check_call(cmd)
 
     print("Pylint'ing...")
     subprocess.check_call(["pylint", "--rcfile=pylint.rc", "tests", "gswrap"],

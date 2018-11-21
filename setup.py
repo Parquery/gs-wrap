@@ -10,10 +10,15 @@ from setuptools import find_packages, setup
 
 import gswrap_meta
 
-with open(
-        os.path.join(os.path.abspath(os.path.dirname(__file__)), 'README.rst'),
-        encoding='utf-8') as fid:
+here = os.path.abspath(os.path.dirname(__file__))  # pylint: disable=invalid-name
+
+with open(os.path.join(here, 'README.rst'), encoding='utf-8') as fid:
     long_description = fid.read().strip()  # pylint: disable=invalid-name
+
+with open(os.path.join(here, 'requirements.txt'), encoding='utf-8') as fid:
+    install_requires = [
+        line for line in fid.read().splitlines() if line.strip()
+    ]
 
 setup(
     name=gswrap_meta.__title__,
@@ -33,20 +38,25 @@ setup(
     license='License :: OSI Approved :: MIT License',
     keywords='gsutil google cloud storage wrap',
     packages=find_packages(exclude=['tests']),
-    install_requires=[
-        'asttokens>=1.1.11,<2', 'icontract>=2.0.0,<3',
-        'google-cloud-storage>=1.13.0,<2'
-    ],
+    install_requires=install_requires,
     extras_require={
         'dev': [
-            'mypy==0.641', 'pylint==2.1.1', 'yapf==0.24.0', 'tox>=3.0.0',
-            'temppathlib>=1.0.3,<2', 'coverage>=4.5.1,<5',
-            'pydocstyle>=3.0.0,<4', 'isort>=4.3.4,<5', 'pyicontract-lint==2.0.0'
+            # yapf: disable
+            'mypy==0.641',
+            'pylint==2.1.1',
+            'yapf==0.24.0',
+            'tox>=3.0.0',
+            'coverage>=4.5.1,<5',
+            'pydocstyle>=3.0.0,<4',
+            'pyicontract-lint>=2.0.0,<3',
+            'docutils>=0.14,<1',
+            'isort>=4.3.4,<5',
+            'pygments>=2.2.0,<3',
+            'temppathlib>=1.0.3,<2'
+            # yapf: enable
         ]
     },
     py_modules=['gswrap', 'gswrap_meta'],
     include_package_data=True,
-    package_data={
-        "gswrap": ["py.typed"],
-        '': ['LICENSE.txt', 'README.rst'],
-    })
+    package_data={"gswrap": ["py.typed"]},
+    data_files=[('.', ['LICENSE', 'README.rst', 'requirements.txt'])])
