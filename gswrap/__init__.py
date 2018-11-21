@@ -106,14 +106,13 @@ def _list_blobs(
     # creating a list is necessary to populate iterator.prefixes
     # check out the following issue:
     # https://github.com/googleapis/google-cloud-python/issues/920
-    objects = list(iterator)
-    subdirectories = iterator.prefixes
-    subdirectories = sorted(subdirectories)
-    blob_names = []  # type: List[str]
 
-    for obj in objects:
+    blob_names = []  # type: List[str]
+    for obj in iterator:
         blob_names.append(obj.name)
 
+    subdirectories = iterator.prefixes
+    subdirectories = sorted(subdirectories)
     for subdir in subdirectories:
         blob_names.append(subdir)
 
@@ -243,7 +242,6 @@ class Client:
             delimiter = '/'
 
         self._change_bucket(bucket_name=url.bucket)
-        # get_blo
         is_not_blob = url.prefix == "" or self._bucket.get_blob(
             blob_name=url.prefix) is None
 
@@ -258,10 +256,6 @@ class Client:
             versions=True, prefix=prefix, delimiter=delimiter)
 
         blob_names = _list_blobs(iterator=iterator)
-
-        if not blob_names:
-            raise google.api_core.exceptions.GoogleAPIError(
-                'URL: {} matched no objects'.format(url.prefix))
 
         return blob_names
 
@@ -405,15 +399,14 @@ class Client:
 
             self._change_bucket(bucket_name=src.bucket)
             src_bucket = self._bucket
-            # TODO(snaji): think if possible without list?
-            list_of_blobs = list(
-                src_bucket.list_blobs(prefix=src_prefix, delimiter=delimiter))
 
-            if not list_of_blobs:
+            first_page = src_bucket.list_blobs(prefix=src_prefix, delimiter=delimiter)._next_page()
+            num_items = first_page.num_items
+            if num_items == 0:
                 raise google.api_core.exceptions.GoogleAPIError(
                     'No URLs matched')
 
-            src_is_dir = len(list_of_blobs) > 1
+            src_is_dir = num_items > 1
             if not recursive and src_is_dir:
                 raise ValueError(
                     "Cannot copy gs://{}/{} to gs://{}/{} (Did you mean to do "
@@ -421,7 +414,8 @@ class Client:
                                             dst.prefix))
 
             dst_bucket = self._client.get_bucket(bucket_name=dst.bucket)
-            for blob in list_of_blobs:
+            blobs_iterator = src_bucket.list_blobs(prefix=src_prefix, delimiter=delimiter)
+            for blob in blobs_iterator:
                 blob_name = _rename_destination_blob(
                     blob_name=blob.name, src=src, dst=dst).as_posix()
 
@@ -570,13 +564,15 @@ class Client:
         src_prefix = src.prefix
         if src.prefix.endswith('/'):
             src_prefix = src_prefix[:-1]
-        list_of_blobs = list(
-            bucket.list_blobs(prefix=src_prefix, delimiter=delimiter))
 
-        if not list_of_blobs:
+        first_page = bucket.list_blobs(prefix=src_prefix, delimiter=delimiter)._next_page()
+        num_items = first_page.num_items
+        if num_items == 0:
             raise google.api_core.exceptions.GoogleAPIError('No URLs matched')
 
-        for blob in list_of_blobs:
+        blob_dir_iterator = bucket.list_blobs(prefix=src_prefix,
+                                              delimiter=delimiter)
+        for blob in blob_dir_iterator:
             blob_path = pathlib.Path(blob.name)
             parent = blob_path.parent
             parent_str = parent.as_posix()
@@ -589,10 +585,11 @@ class Client:
             if not needed_dirs.is_file():
                 needed_dirs.mkdir(parents=True, exist_ok=True)
 
+        blob_iterator = bucket.list_blobs(prefix=src_prefix, delimiter=delimiter)
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
-            for file in list_of_blobs:
+            for file in blob_iterator:
                 file_path = file.name
                 file_name = file_path.replace(src_gcs_prefix_parent, '', 1)
                 if file_name.startswith('/'):
@@ -639,13 +636,12 @@ class Client:
         bucket = self._bucket
 
         blob = bucket.get_blob(blob_name=gcs_url.prefix)
-        if not recursive:
-            if blob is None:
-                raise ValueError("No URL matched. Cannot remove gs://{}/{} "
-                                 "(Did you mean to do rm recursive?)".format(
-                                     gcs_url.bucket, gcs_url.prefix))
-            else:
-                list_of_blobs = [blob]
+        if blob is not None:
+            bucket.delete_blob(blob_name=blob.name)
+        elif not recursive:
+            raise ValueError("No URL matched. Cannot remove gs://{}/{} "
+                             "(Did you mean to do rm recursive?)".format(
+                                 gcs_url.bucket, gcs_url.prefix))
         else:
             if recursive:
                 delimiter = ''
@@ -656,21 +652,20 @@ class Client:
             gcs_url_prefix = gcs_url.prefix
             if not gcs_url_prefix.endswith('/'):
                 gcs_url_prefix = gcs_url_prefix + '/'
-            list_of_blobs = list(
-                bucket.list_blobs(prefix=gcs_url_prefix, delimiter=delimiter))
-            if blob is not None:
-                list_of_blobs.append(blob)
 
-        if not list_of_blobs:
-            raise google.api_core.exceptions.NotFound('No URLs matched')
+            first_page = bucket.list_blobs(prefix=gcs_url_prefix, delimiter=delimiter)._next_page()
+            if first_page.num_items == 0:
+                raise google.api_core.exceptions.NotFound('No URLs matched')
 
-        futures = []  # type: List[concurrent.futures.Future]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
-                as executor:
-            for blob_to_delete in list_of_blobs:
-                delete_thread = executor.submit(
-                    bucket.delete_blob, blob_name=blob_to_delete.name)
-                futures.append(delete_thread)
+            blob_iterator = bucket.list_blobs(prefix=gcs_url_prefix,
+                                              delimiter=delimiter)
+            futures = []  # type: List[concurrent.futures.Future]
+            with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=max_workers) as executor:
+                for blob_to_delete in blob_iterator:
+                    delete_thread = executor.submit(
+                        bucket.delete_blob, blob_name=blob_to_delete.name)
+                    futures.append(delete_thread)
 
-        for future in futures:
-            future.result()
+            for future in futures:
+                future.result()
