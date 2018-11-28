@@ -3,8 +3,11 @@
 
 # pylint: disable=protected-access
 
+import base64
 import concurrent.futures
 import os
+import datetime
+import hashlib
 import pathlib
 import re
 import shutil
@@ -45,25 +48,9 @@ class _GCSURL:
         self.prefix = prefix
 
 
-class _Path:
+def classify(res_loc: str) -> Union[_GCSURL, str]:
     """
-    Store local path.
-
-    :ivar path: local path to a directory or file
-    :vartype path: str
-    """
-
-    def __init__(self, path: str) -> None:
-        """Initialize path.
-
-        :param path: local path
-        """
-        self.path = path
-
-
-def classifier(res_loc: str) -> Union[_GCSURL, _Path]:
-    """
-    Classifies resource into one of the 2 classes.
+    Classifies resource into one of 2 classes.
 
     :param res_loc: resource location
     :return: class corresponding to the file/directory location
@@ -73,8 +60,8 @@ def classifier(res_loc: str) -> Union[_GCSURL, _Path]:
     if parsed_path.scheme == 'gs':
         return _GCSURL(bucket=parsed_path.netloc, prefix=parsed_path.path)
 
-    if parsed_path.scheme == '':
-        return _Path(path=parsed_path.path)
+    if parsed_path.scheme == '' or parsed_path.scheme == 'file':
+        return parsed_path.path
 
     raise google.api_core.exceptions.GoogleAPIError(
         "Unrecognized scheme '{}'.".format(parsed_path.scheme))
@@ -155,6 +142,27 @@ def _rename_destination_blob(blob_name: str, src: _GCSURL,
     return pathlib.Path(dst.prefix) / src_suffix
 
 
+class Stat:
+    """
+    represent stat of an object in Google Storage. Times are given in UTC.
+    """
+
+    # pylint: disable=too-many-instance-attributes
+    def __init__(self):
+        """Initialize."""
+        self.creation_time = None  # type: Optional[datetime.datetime]
+        self.update_time = None  # type: Optional[datetime.datetime]
+        self.storage_class = None  # type: Optional[str]
+        self.content_length = None  # type: Optional[int]
+        self.file_mtime = None  # type: Optional[datetime.datetime]
+        self.file_atime = None  # type: Optional[datetime.datetime]
+        self.posix_uid = None  # type: Optional[str]
+        self.posix_gid = None  # type: Optional[str]
+        self.posix_mode = None  # type: Optional[str]
+        self.crc32c = None  # type: Optional[bytes]
+        self.md5 = None  # type: Optional[bytes]
+
+
 class Client:
     """Google Cloud Storage Client for simple usage of gsutil commands."""
 
@@ -215,15 +223,15 @@ class Client:
         :param recursive: List only direct subdirectories
         :return: List of Google cloud storage URLs according the given URL
         """
-        gcs_url = classifier(res_loc=url)  # type: Union[_GCSURL, _Path]
+        ls_url = classify(res_loc=url)  # type: Union[_GCSURL, str]
 
-        assert isinstance(gcs_url, _GCSURL)
+        assert isinstance(ls_url, _GCSURL)
 
-        blobs = self._ls(url=gcs_url, recursive=recursive)
+        blobs = self._ls(url=ls_url, recursive=recursive)
 
         blob_list = []
         for element in blobs:
-            blob_list.append('gs://' + gcs_url.bucket + '/' + element)
+            blob_list.append('gs://' + ls_url.bucket + '/' + element)
 
         return blob_list
 
@@ -268,7 +276,7 @@ class Client:
            dst: str,
            recursive: bool = False,
            no_clobber: bool = False,
-           max_workers: int = 1) -> None:
+           max_workers: Optional[int] = 1) -> None:
         """
         Copy objects from source to destination URL.
 
@@ -286,21 +294,21 @@ class Client:
             dst="gs://your-bucket/another-dir/", recursive=False)
             # google.api_core.exceptions.GoogleAPIError: No URLs matched
 
-            # client.ls(gcs_url=gs://your-bucket/some-dir/, recursive=True)
+            # client.ls(url=gs://your-bucket/some-dir/, recursive=True)
             # gs://your-bucket/some-dir/file1
             # gs://your-bucket/some-dir/dir1/file11
 
             # destination URL without slash
             client.cp(src="gs://your-bucket/some-dir/",
             dst="gs://your-bucket/another-dir", recursive=True)
-            # client.ls(gcs_url=gs://your-bucket/another-dir/, recursive=True)
+            # client.ls(url=gs://your-bucket/another-dir/, recursive=True)
             # gs://your-bucket/another-dir/file1
             # gs://your-bucket/another-dir/dir1/file11
 
             # destination URL with slash
             client.cp(src="gs://your-bucket/some-dir/",
             dst="gs://your-bucket/another-dir/", recursive=True)
-            # client.ls(gcs_url=gs://your-bucket/another-dir/, recursive=True)
+            # client.ls(url=gs://your-bucket/another-dir/, recursive=True)
             # gs://your-bucket/another-dir/some-dir/file1
             # gs://your-bucket/another-dir/some-dir/dir1/file11
         :param no_clobber:
@@ -308,13 +316,15 @@ class Client:
             When specified, existing files or objects at the destination will
             not be overwritten.
         :param max_workers:
+            is set default to 1 resp. non-multithreaded. Numbers of worker
+            for multithreading can be freely assigned to any integer number.
             if max_workers is None, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
             instead of CPU work.
         """
-        src_url = classifier(res_loc=src)  # type: Union[_GCSURL, _Path]
-        dst_url = classifier(res_loc=dst)  # type: Union[_GCSURL, _Path]
+        src_url = classify(res_loc=src)  # type: Union[_GCSURL, str]
+        dst_url = classify(res_loc=dst)  # type: Union[_GCSURL, str]
 
         if isinstance(src_url, _GCSURL) and isinstance(dst_url, _GCSURL):
             self._cp(
@@ -324,7 +334,7 @@ class Client:
                 no_clobber=no_clobber,
                 max_workers=max_workers)
         elif isinstance(src_url, _GCSURL):
-            assert isinstance(dst_url, _Path)
+            assert isinstance(dst_url, str)
             self._download(
                 src=src_url,
                 dst=dst_url,
@@ -332,7 +342,7 @@ class Client:
                 no_clobber=no_clobber,
                 max_workers=max_workers)
         elif isinstance(dst_url, _GCSURL):
-            assert isinstance(src_url, _Path)
+            assert isinstance(src_url, str)
             self._upload(
                 src=src_url,
                 dst=dst_url,
@@ -340,8 +350,8 @@ class Client:
                 no_clobber=no_clobber,
                 max_workers=max_workers)
         else:
-            assert isinstance(src_url, _Path)
-            assert isinstance(dst_url, _Path)
+            assert isinstance(src_url, str)
+            assert isinstance(dst_url, str)
             # both local
             if no_clobber and pathlib.Path(dst).exists():
                 # exists, do not overwrite
@@ -369,7 +379,7 @@ class Client:
             dst: _GCSURL,
             recursive: bool = False,
             no_clobber: bool = False,
-            max_workers: int = 1) -> None:
+            max_workers: Optional[int] = 1) -> None:
         """
         Copy blobs from source to destination google cloud URL.
 
@@ -378,6 +388,8 @@ class Client:
         :param recursive: if true also copy files within folders
         :param no_clobber: if true don't overwrite files which already exist
         :param max_workers:
+            is set default to 1 resp. non-multithreaded. Numbers of worker
+            for multithreading can be freely assigned to any integer number.
             if max_workers is None, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
@@ -440,11 +452,11 @@ class Client:
     # pylint: disable=too-many-locals
     # pylint: disable=too-many-branches
     def _upload(self,
-                src: _Path,
+                src: str,
                 dst: _GCSURL,
                 recursive: bool = False,
                 no_clobber: bool = False,
-                max_workers: int = 1) -> None:
+                max_workers: Optional[int] = 1) -> None:
         """
         Upload objects from local source to google cloud destination.
 
@@ -453,6 +465,8 @@ class Client:
         :param recursive: if true also upload files within folders
         :param no_clobber: if true don't overwrite files which already exist
         :param max_workers:
+            is set default to 1 resp. non-multithreaded. Numbers of worker
+            for multithreading can be freely assigned to any integer number.
             if max_workers is None, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
@@ -461,24 +475,24 @@ class Client:
         upload_files = []  # type: List[str]
 
         # copy one file to one location incl. renaming
-        src_path = pathlib.Path(src.path)
+        src_path = pathlib.Path(src)
         src_is_file = src_path.is_file()
         if src_is_file:
             upload_files.append(src_path.name)
-            src.path = src_path.parent.as_posix()
+            src = src_path.parent.as_posix()
         elif recursive:
             # pylint: disable=unused-variable
-            for root, dirs, files in os.walk(src.path):
+            for root, dirs, files in os.walk(src):
                 for file in files:
                     path = os.path.join(root, file)
-                    prefix = str(path).replace(src.path, '', 1)
+                    prefix = str(path).replace(src, '', 1)
                     if prefix.startswith('/'):
                         prefix = prefix[1:]
                     upload_files.append(prefix)
         else:
             raise ValueError(
                 "Cannot upload {} to gs://{}/{} (Did you mean to do cp "
-                "recursive?)".format(src.path, dst.bucket, dst.prefix))
+                "recursive?)".format(src, dst.bucket, dst.prefix))
 
         self._change_bucket(bucket_name=dst.bucket)
         bucket = self._bucket
@@ -497,9 +511,8 @@ class Client:
                     blob_name = pathlib.Path(dst.prefix)
                     if not dst_is_file and not src_is_file:
 
-                        parent_path = pathlib.Path(src.path).parent
-                        src_parent = src.path.replace(parent_path.as_posix(),
-                                                      "", 1)
+                        parent_path = pathlib.Path(src).parent
+                        src_parent = src.replace(parent_path.as_posix(), "", 1)
                         if src_parent.startswith('/'):
                             src_parent = src_parent[1:]
 
@@ -514,7 +527,7 @@ class Client:
                     continue
 
                 blob = bucket.blob(blob_name=new_name)
-                file_name = pathlib.Path(src.path) / file
+                file_name = pathlib.Path(src) / file
                 upload_thread = executor.submit(
                     blob.upload_from_filename, filename=file_name.as_posix())
                 futures.append(upload_thread)
@@ -527,10 +540,10 @@ class Client:
     # pylint: disable=too-many-branches
     def _download(self,
                   src: _GCSURL,
-                  dst: _Path,
+                  dst: str,
                   recursive: bool = False,
                   no_clobber: bool = False,
-                  max_workers: int = 1) -> None:
+                  max_workers: Optional[int] = 1) -> None:
         """
         Download objects from google cloud source to local destination.
 
@@ -539,12 +552,14 @@ class Client:
         :param recursive: if yes also download files within folders
         :param no_clobber: if yes don't overwrite files which already exist
         :param max_workers:
+            is set default to 1 resp. non-multithreaded. Numbers of worker
+            for multithreading can be freely assigned to any integer number.
             if max_workers is None, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
             instead of CPU work.
         """
-        dst_path = pathlib.Path(dst.path)
+        dst_path = pathlib.Path(dst)
         if not dst_path.exists():
             dst_path.write_text("create file")
 
@@ -579,7 +594,7 @@ class Client:
             blob_path = pathlib.Path(blob.name)
             parent = blob_path.parent
             parent_str = parent.as_posix()
-            parent_str = parent_str.replace(src_gcs_prefix_parent, dst.path)
+            parent_str = parent_str.replace(src_gcs_prefix_parent, dst)
             parent_dir_set.add(parent_str)
 
         parent_dir_list = sorted(parent_dir_set)
@@ -619,33 +634,36 @@ class Client:
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
     # pylint: disable=invalid-name
     # pylint: disable=too-many-locals
-    def rm(self, url: str, recursive: bool = False,
-           max_workers: int = 1) -> None:
+    def rm(self,
+           url: str,
+           recursive: bool = False,
+           max_workers: Optional[int] = 1) -> None:
         """
         Remove blobs at given URL from google cloud storage.
 
         :param url: google cloud storage URL
         :param recursive: if yes remove files within folders
         :param max_workers:
+            is set default to 1 resp. non-multithreaded. Numbers of worker
+            for multithreading can be freely assigned to any integer number.
             if max_workers is None, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
             instead of CPU work.
         """
-        gcs_url = classifier(res_loc=url)
+        rm_url = classify(res_loc=url)  # type: Union[_GCSURL, str]
+        assert isinstance(rm_url, _GCSURL)
 
-        assert isinstance(gcs_url, _GCSURL)
-
-        self._change_bucket(bucket_name=gcs_url.bucket)
+        self._change_bucket(bucket_name=rm_url.bucket)
         bucket = self._bucket
 
-        blob = bucket.get_blob(blob_name=gcs_url.prefix)
+        blob = bucket.get_blob(blob_name=rm_url.prefix)
         if blob is not None:
             bucket.delete_blob(blob_name=blob.name)
         elif not recursive:
             raise ValueError("No URL matched. Cannot remove gs://{}/{} "
                              "(Did you mean to do rm recursive?)".format(
-                                 gcs_url.bucket, gcs_url.prefix))
+                                 rm_url.bucket, rm_url.prefix))
         else:
             if recursive:
                 delimiter = ''
@@ -653,7 +671,7 @@ class Client:
                 delimiter = '/'
 
             # add trailing slash to achieve gsutil-like ls behaviour
-            gcs_url_prefix = gcs_url.prefix
+            gcs_url_prefix = rm_url.prefix
             if not gcs_url_prefix.endswith('/'):
                 gcs_url_prefix = gcs_url_prefix + '/'
 
@@ -674,3 +692,152 @@ class Client:
 
             for future in futures:
                 future.result()
+
+    @icontract.require(lambda url: url.startswith('gs://'))
+    @icontract.require(lambda url: not contains_wildcard(prefix=url))
+    def read_bytes(self, url: str) -> bytes:
+        """
+        Retrieve the bytes of the blob at the URL.
+
+        The caller is expected to make sure that the file fits in memory.
+        :param url: to the blob on the storage
+        :return: bytes of the blob
+        """
+        cat_url = classify(res_loc=url)  # type: Union[_GCSURL, str]
+        assert isinstance(cat_url, _GCSURL)
+
+        self._change_bucket(bucket_name=cat_url.bucket)
+
+        blob = self._bucket.get_blob(blob_name=cat_url.prefix)
+        if blob is None:
+            raise google.api_core.exceptions.NotFound('No URLs matched')
+
+        return blob.download_as_string()
+
+    @icontract.require(lambda url: url.startswith('gs://'))
+    @icontract.require(lambda url: not contains_wildcard(prefix=url))
+    def read_text(self, url: str) -> str:
+        """
+        Retrieve the text of the blob at the URL.
+
+        The caller is expected to make sure that the file fits in memory.
+        :param url: to the blob on the storage
+        :return: text of the blob
+        """
+        return self.read_bytes(url=url).decode(encoding='utf-8')
+
+    @icontract.require(lambda url: url.startswith('gs://'))
+    @icontract.require(lambda url: not contains_wildcard(prefix=url))
+    def write_bytes(self, url: str, data: bytes):
+        """
+        Write bytes to the storage by the given URL.
+
+        :param url: where to write in the storage
+        :param data: what to write
+        :return:
+        """
+        upload_url = classify(res_loc=url)  # type: Union[_GCSURL, str]
+        assert isinstance(upload_url, _GCSURL)
+
+        self._change_bucket(bucket_name=upload_url.bucket)
+
+        blob = self._bucket.blob(blob_name=upload_url.prefix)
+
+        blob.upload_from_string(data=data)
+
+    @icontract.require(lambda url: url.startswith('gs://'))
+    @icontract.require(lambda url: not contains_wildcard(prefix=url))
+    def write_text(self, url: str, text: str, encoding: str = 'utf-8'):
+        """
+        Write bytes to the storage by the given URL.
+
+        :param url: where to write in the storage
+        :param text: what to write
+        :param encoding: how to encode, defaults to 'utf-8'
+        :return:
+        """
+        self.write_bytes(url=url, data=text.encode(encoding=encoding))
+
+    @icontract.require(lambda url: url.startswith('gs://'))
+    @icontract.require(lambda url: not contains_wildcard(prefix=url))
+    def stat(self, url: str) -> Optional[Stat]:
+        """
+        Retrieve that stat of the object in the Google Cloud Storage.
+
+        :param url: to the object
+        :return: object status,
+            or None if the object does not exist or is a directory.
+        """
+        stat_url = classify(res_loc=url)  # type: Union[_GCSURL, str]
+        assert isinstance(stat_url, _GCSURL)
+
+        self._change_bucket(bucket_name=stat_url.bucket)
+
+        blob = self._bucket.get_blob(blob_name=stat_url.prefix)
+
+        if blob is None:
+            return None
+
+        result = Stat()
+
+        result.creation_time = blob.time_created
+        result.update_time = blob.updated
+        result.storage_class = blob.storage_class
+        result.content_length = int(blob.size)
+        result.crc32c = blob.crc32c
+        result.md5 = blob.md5_hash
+
+        return result
+
+    @icontract.require(lambda url: url.startswith('gs://'))
+    @icontract.require(lambda url: not contains_wildcard(prefix=url))
+    def same_modtime(self, path: Union[str, pathlib.Path], url: str) -> bool:
+        """
+        Check if local path & URL  have equal modification times (up to secs).
+
+        Mind that you need to copy the object with -P (preserve posix) flag.
+        :param path: to the local file
+        :param url: URL to an object
+        :return: True if the modification time is the same
+        """
+        timestamp = os.stat(str(path)).st_mtime
+        dtime = datetime.datetime.utcfromtimestamp(timestamp).replace(
+            microsecond=0)
+
+        url_stat = self.stat(url=url)
+
+        if url_stat is None:
+            raise RuntimeError("The URL does not exist: {}".format(url))
+
+        return dtime == url_stat.update_time
+
+    def same_md5(self, path: Union[str, pathlib.Path], url: str) -> bool:
+        """
+        Check if the MD5 differs between the local file and the blob.
+        :param path: to the local file
+        :param url:  to the remote object in Google storage
+        :return:
+            True if the MD5 is the same. False if the checksum differs or
+            local file and/or the remote object do not exist.
+        """
+        pth_str = str(path)
+        if not os.path.exists(pth_str):
+            return False
+
+        url_stat = self.stat(url=url)
+
+        if url_stat is None:
+            return False
+
+        hsh = hashlib.md5()
+        block_size = 2 ** 20
+        with open(pth_str, 'rb') as fid:
+            while True:
+                buf = fid.read(block_size)
+                if not buf:
+                    break
+                hsh.update(buf)
+
+        digest = base64.b64encode(hsh.digest()).decode('utf-8')
+
+        return url_stat.md5 == digest
