@@ -13,8 +13,9 @@ from typing import List
 # https://cloud.google.com/sdk/gcloud/reference/beta/emulators/
 # https://github.com/googleapis/google-cloud-python/issues/4897
 # https://github.com/googleapis/google-cloud-python/issues/4840
-TEST_GCS_BUCKET = None  # type: str
-TEST_GCS_BUCKET_NO_ACCESS = None  # type: str
+# TODO(snaji): remove
+TEST_GCS_BUCKET = "parquery-sandbox"  # type: str
+TEST_GCS_BUCKET_NO_ACCESS = "parquery-data"  # type: str
 GCS_FILE_CONTENT = "test file"  # type: str
 
 

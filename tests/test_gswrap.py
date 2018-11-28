@@ -18,13 +18,6 @@ class TestGCSURL(unittest.TestCase):
         self.assertEqual('folder-in-bucket/sub-dir', gs_path.prefix)
 
 
-class TestPath(unittest.TestCase):
-    def test_expected_structure(self):
-        local_pth = gswrap._Path(path='/home/user/dir/sub-dir')
-
-        self.assertEqual('/home/user/dir/sub-dir', local_pth.path)
-
-
 class TestGSwrapFunctions(unittest.TestCase):
     def test_contains_wildcard(self):
         no_wildcard = 'no wildcard here'
@@ -41,7 +34,7 @@ class TestGSwrapFunctions(unittest.TestCase):
         bucket = 'your-bucket'
         prefix = 'your-dir/sub-dir'
         link = 'gs://' + bucket + '/' + prefix
-        url = gswrap.classifier(res_loc=link)
+        url = gswrap.classify(res_loc=link)
 
         self.assertTrue(isinstance(url, gswrap._GCSURL))
         self.assertEqual(bucket, url.bucket)
@@ -49,10 +42,10 @@ class TestGSwrapFunctions(unittest.TestCase):
 
     def test_local_url_decomposition(self):
         path = '/home/user/'
-        url = gswrap.classifier(res_loc=path)
+        url = gswrap.classify(res_loc=path)
 
-        self.assertTrue(isinstance(url, gswrap._Path))
-        self.assertEqual(path, url.path)
+        self.assertTrue(isinstance(url, str))
+        self.assertEqual(path, url)
 
 
 if __name__ == '__main__':
