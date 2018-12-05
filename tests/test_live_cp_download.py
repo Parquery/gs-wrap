@@ -6,6 +6,7 @@
 # pylint: disable=protected-access
 # pylint: disable=expression-not-assigned
 
+import datetime
 import pathlib
 import shutil
 import subprocess
@@ -286,6 +287,55 @@ class TestCPDownload(unittest.TestCase):
 
             self.assertEqual(tests.common.GCS_FILE_CONTENT,
                              local_path.read_text())
+
+
+class TestCPDownloadNoCommonSetup(unittest.TestCase):
+    def setUp(self):
+        self.client = gswrap.Client(bucket_name=tests.common.TEST_GCS_BUCKET)
+        self.bucket_prefix = str(uuid.uuid4())
+
+    def tearDown(self):
+        pass
+
+    def test_download_preserved_posix(self):
+        with temppathlib.TemporaryDirectory() as tmp_dir:
+            setup_file = tmp_dir.path / 'file-to-download'
+            setup_file.write_text(tests.common.GCS_FILE_CONTENT)
+            url = 'gs://{}/{}/d1/f11'.format(tests.common.TEST_GCS_BUCKET,
+                                             self.bucket_prefix)
+
+            subprocess.check_call(
+                ["gsutil", "cp", "-P",
+                 setup_file.as_posix(), url])
+
+            file = tmp_dir.path / 'file'
+
+            self.client.cp(
+                src=url,
+                dst=file.as_posix(),
+                recursive=True,
+                preserve_posix=True)
+
+            try:
+                gcs_stat = self.client.stat(url=url)
+                self.assertIsNotNone(gcs_stat)
+
+                file_stat = file.stat()
+                self.assertIsNotNone(file_stat)
+
+                self.assertEqual(file_stat.st_size, gcs_stat.content_length)
+
+                self.assertEqual(
+                    datetime.datetime.utcfromtimestamp(
+                        file_stat.st_mtime).replace(microsecond=0).timestamp(),
+                    gcs_stat.file_mtime.timestamp())
+
+                self.assertEqual(file_stat.st_uid, int(gcs_stat.posix_uid))
+                self.assertEqual(file_stat.st_gid, int(gcs_stat.posix_gid))
+                self.assertEqual(gcs_stat.posix_mode,
+                                 oct(file_stat.st_mode)[-3:])
+            finally:
+                tests.common.call_gsutil_rm(path=url, recursive=False)
 
 
 if __name__ == '__main__':

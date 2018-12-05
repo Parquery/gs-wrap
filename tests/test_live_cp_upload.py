@@ -6,6 +6,7 @@
 # pylint: disable=protected-access
 # pylint: disable=expression-not-assigned
 
+import datetime
 import subprocess
 import tempfile
 import unittest
@@ -28,36 +29,6 @@ class TestCPUpload(unittest.TestCase):
     def tearDown(self):
         tests.common.gcs_test_teardown(prefix=self.bucket_prefix)
         self.tmp_dir.cleanup()
-
-    def test_upload_two_files(self):
-
-        with temppathlib.TemporaryDirectory() as local_tmpdir:
-            tmp_folder = local_tmpdir.path / 'some-folder'
-            tmp_folder.mkdir()
-            tmp_path = tmp_folder / str(uuid.uuid4())
-            tmp_path.write_text('hello')
-            other_folder = local_tmpdir.path / 'another-folder'
-            other_folder.mkdir()
-            other_file = other_folder / str(uuid.uuid4())
-            other_file.write_text('hello')
-
-            self.client.cp(
-                src=local_tmpdir.path.as_posix(),
-                dst='gs://{}/{}/'.format(tests.common.TEST_GCS_BUCKET,
-                                         self.bucket_prefix),
-                recursive=True)
-
-            content = self.client._bucket.get_blob(blob_name="{}/{}".format(
-                self.bucket_prefix,
-                tmp_path.relative_to(local_tmpdir.path.parent)))
-            content_other_file = self.client._bucket.get_blob(
-                blob_name="{}/{}".format(
-                    self.bucket_prefix,
-                    other_file.relative_to(local_tmpdir.path.parent)))
-            text = content.download_as_string()
-            text_other_file = content_other_file.download_as_string()
-            self.assertEqual(b'hello', text)
-            self.assertEqual(b'hello', text_other_file)
 
     def test_gsutil_vs_gswrap_upload_recursive(self):  # pylint: disable=invalid-name
         # pylint: disable=too-many-locals
@@ -260,6 +231,76 @@ class TestCPUpload(unittest.TestCase):
                 '{}/d1/f11'.format(self.bucket_prefix))
 
             self.assertNotEqual(timestamp_f11, blob_f11_not_updated.updated)
+
+
+class TestCPUploadNoCommonSetup(unittest.TestCase):
+    def setUp(self):
+        self.client = gswrap.Client(bucket_name=tests.common.TEST_GCS_BUCKET)
+        self.bucket_prefix = str(uuid.uuid4())
+
+    def tearDown(self):
+        pass
+
+    def test_upload_two_files(self):
+
+        with temppathlib.TemporaryDirectory() as local_tmpdir:
+            tmp_folder = local_tmpdir.path / 'some-folder'
+            tmp_folder.mkdir()
+            tmp_path = tmp_folder / str(uuid.uuid4())
+            tmp_path.write_text('hello')
+            other_folder = local_tmpdir.path / 'another-folder'
+            other_folder.mkdir()
+            other_file = other_folder / str(uuid.uuid4())
+            other_file.write_text('hello')
+
+            self.client.cp(
+                src=local_tmpdir.path.as_posix(),
+                dst='gs://{}/{}/'.format(tests.common.TEST_GCS_BUCKET,
+                                         self.bucket_prefix),
+                recursive=True)
+
+            content = self.client._bucket.get_blob(blob_name="{}/{}".format(
+                self.bucket_prefix,
+                tmp_path.relative_to(local_tmpdir.path.parent)))
+            content_other_file = self.client._bucket.get_blob(
+                blob_name="{}/{}".format(
+                    self.bucket_prefix,
+                    other_file.relative_to(local_tmpdir.path.parent)))
+            text = content.download_as_string()
+            text_other_file = content_other_file.download_as_string()
+            self.assertEqual(b'hello', text)
+            self.assertEqual(b'hello', text_other_file)
+
+    def test_upload_preserved_posix(self):
+        with temppathlib.NamedTemporaryFile() as file:
+            file.path.write_text(tests.common.TEST_GCS_BUCKET)
+
+            url = "gs://{}/{}/file".format(tests.common.TEST_GCS_BUCKET,
+                                           self.bucket_prefix)
+
+            self.client.cp(
+                src=file.path.as_posix(), dst=url, preserve_posix=True)
+
+            try:
+                gcs_stat = self.client.stat(url=url)
+                self.assertIsNotNone(gcs_stat)
+
+                file_stat = file.path.stat()
+                self.assertIsNotNone(file_stat)
+
+                self.assertEqual(file_stat.st_size, gcs_stat.content_length)
+
+                self.assertEqual(
+                    datetime.datetime.utcfromtimestamp(
+                        file_stat.st_mtime).replace(microsecond=0).timestamp(),
+                    gcs_stat.file_mtime.timestamp())
+
+                self.assertEqual(file_stat.st_uid, int(gcs_stat.posix_uid))
+                self.assertEqual(file_stat.st_gid, int(gcs_stat.posix_gid))
+                self.assertEqual(
+                    oct(file_stat.st_mode)[-3:], gcs_stat.posix_mode)
+            finally:
+                tests.common.call_gsutil_rm(path=url, recursive=False)
 
 
 if __name__ == '__main__':

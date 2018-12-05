@@ -2,23 +2,26 @@
 """Wrap gCloud Storage API for simpler & multi-threaded handling of objects."""
 
 # pylint: disable=protected-access
+# pylint: disable=too-many-lines
 
 import base64
 import concurrent.futures
-import os
 import datetime
 import hashlib
+import os
 import pathlib
 import re
 import shutil
 import urllib.parse
-from typing import List, Optional, Union  # pylint: disable=unused-import
+from typing import (  # pylint: disable=unused-import
+    List, Optional, Sequence, Tuple, Union)
 
 import google.api_core.exceptions
 import google.api_core.page_iterator
 import google.auth.credentials
 import google.cloud.storage
 import icontract
+import logthis
 
 
 class _GCSURL:
@@ -143,9 +146,7 @@ def _rename_destination_blob(blob_name: str, src: _GCSURL,
 
 
 class Stat:
-    """
-    represent stat of an object in Google Storage. Times are given in UTC.
-    """
+    """Represent stat of an object in Google Storage. Times are given in UTC."""
 
     # pylint: disable=too-many-instance-attributes
     def __init__(self):
@@ -161,6 +162,75 @@ class Stat:
         self.posix_mode = None  # type: Optional[str]
         self.crc32c = None  # type: Optional[bytes]
         self.md5 = None  # type: Optional[bytes]
+
+
+def _set_stats_to_metadata(path: str, blob: google.cloud.storage.blob.Blob):
+    """Set os.stat information to the blob's metadata."""
+    stats = os.stat(path)
+
+    new_metadata = {
+        'goog-reserved-file-atime': int(stats.st_atime),
+        'goog-reserved-file-mtime': int(stats.st_mtime),
+        'goog-reserved-posix-uid': stats.st_uid,
+        'goog-reserved-posix-gid': stats.st_gid,
+        # https://stackoverflow.com/a/5337329
+        # os.stat('file').st_mode returns an int, but we like octal
+        'goog-reserved-posix-mode': oct(stats.st_mode)[-3:]
+    }
+    blob.metadata = new_metadata
+    blob.patch()
+
+
+def _set_metadata_to_stats(path: str, blob: google.cloud.storage.blob.Blob):
+    """Set the blob's google cloud metadata information to the local stats."""
+    try:
+        a_time = blob.metadata['goog-reserved-file-atime']
+        m_time = blob.metadata['goog-reserved-file-mtime']
+        os.utime(path, (int(a_time), int(m_time)))
+    except KeyError:
+        pass
+    try:
+        os.setuid(int(blob.metadata['goog-reserved-posix-uid']))
+        os.setgid(int(blob.metadata['goog-reserved-posix-gid']))
+        os.chmod(path, int(blob.metadata['goog-reserved-posix-mode'], 8))
+    except KeyError:
+        pass
+
+
+def _upload_from_filename(blob: google.cloud.storage.blob.Blob,
+                          filename: str,
+                          preserve_posix: bool = False):
+    """
+    Upload from filename with the option to preserve POSIX attributes.
+
+    :param blob: where file will be uploaded to
+    :param filename: name of the file to upload
+    :param preserve_posix:
+        if true then copy os.stat to blob metadata, else no metadata is created
+    :return:
+    """
+    blob.upload_from_filename(filename=filename)
+
+    if preserve_posix:
+        _set_stats_to_metadata(path=filename, blob=blob)
+
+
+def _download_to_filename(file: google.cloud.storage.blob.Blob,
+                          filename: str,
+                          preserve_posix: bool = False):
+    """
+    Download to filename with the option to preserve POSIX attributes.
+
+    :param file: blob that will be downloaded
+    :param filename: path where blob will be downloaded to
+    :param preserve_posix:
+        if true then copy blob metadata to file stats, else os.stat will differ
+    :return:
+    """
+    file.download_to_filename(filename=filename)
+
+    if preserve_posix:
+        _set_metadata_to_stats(path=filename, blob=file)
 
 
 class Client:
@@ -267,16 +337,36 @@ class Client:
 
         return blob_names
 
-    @icontract.require(lambda src: not contains_wildcard(prefix=src))
-    @icontract.require(lambda dst: not contains_wildcard(prefix=dst))
+    @icontract.require(lambda url: url.startswith('gs://'))
+    @icontract.require(lambda url: not contains_wildcard(prefix=url))
+    def long_ls(self, url: str,
+                recursive: bool = False) -> List[Tuple[str, Stat]]:
+        """
+        List URLs with their stats given the url.
+
+        :param url: uniform google cloud url
+        :param recursive: List only direct subdirectories
+        :return: List of the urls of the blobs found and their stats
+        """
+        entries = self.ls(url=url, recursive=recursive)
+
+        tuples = []
+        for entry in entries:
+            tuples.append((entry, self.stat(url=entry)))
+
+        return tuples
+
+    @icontract.require(lambda src: not contains_wildcard(prefix=str(src)))
+    @icontract.require(lambda dst: not contains_wildcard(prefix=str(dst)))
     # pylint: disable=invalid-name
     # pylint: disable=too-many-arguments
     def cp(self,
-           src: str,
-           dst: str,
+           src: Union[str, pathlib.Path],
+           dst: Union[str, pathlib.Path],
            recursive: bool = False,
            no_clobber: bool = False,
-           max_workers: Optional[int] = 1) -> None:
+           multithreaded: bool = False,
+           preserve_posix: bool = False) -> None:
         """
         Copy objects from source to destination URL.
 
@@ -315,16 +405,26 @@ class Client:
             (from https://cloud.google.com/storage/docs/gsutil/commands/cp)
             When specified, existing files or objects at the destination will
             not be overwritten.
-        :param max_workers:
-            is set default to 1 resp. non-multithreaded. Numbers of worker
-            for multithreading can be freely assigned to any integer number.
-            if max_workers is None, it will default
+        :param multithreaded:
+            is set default to False resp. non-multithreaded.
+            if set to True, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
             instead of CPU work.
+        :param preserve_posix:
+            (from https://cloud.google.com/storage/docs/gsutil/commands/cp)
+            Causes POSIX attributes to be preserved when objects are copied.
+            With this feature enabled, gsutil cp will copy fields provided by
+            stat. These are the user ID of the owner, the group ID of the
+            owning group, the mode (permissions) of the file, and the
+            access/modification time of the file. POSIX attributes are always
+            preserved when blob is copied on google cloud storage.
         """
-        src_url = classify(res_loc=src)  # type: Union[_GCSURL, str]
-        dst_url = classify(res_loc=dst)  # type: Union[_GCSURL, str]
+        src_str = src if isinstance(src, str) else src.as_posix()  # type:str
+        dst_str = dst if isinstance(dst, str) else dst.as_posix()  # type:str
+
+        src_url = classify(res_loc=str(src_str))  # type: Union[_GCSURL, str]
+        dst_url = classify(res_loc=str(dst_str))  # type: Union[_GCSURL, str]
 
         if isinstance(src_url, _GCSURL) and isinstance(dst_url, _GCSURL):
             self._cp(
@@ -332,7 +432,7 @@ class Client:
                 dst=dst_url,
                 recursive=recursive,
                 no_clobber=no_clobber,
-                max_workers=max_workers)
+                multithreaded=multithreaded)
         elif isinstance(src_url, _GCSURL):
             assert isinstance(dst_url, str)
             self._download(
@@ -340,7 +440,8 @@ class Client:
                 dst=dst_url,
                 recursive=recursive,
                 no_clobber=no_clobber,
-                max_workers=max_workers)
+                multithreaded=multithreaded,
+                preserve_posix=preserve_posix)
         elif isinstance(dst_url, _GCSURL):
             assert isinstance(src_url, str)
             self._upload(
@@ -348,29 +449,30 @@ class Client:
                 dst=dst_url,
                 recursive=recursive,
                 no_clobber=no_clobber,
-                max_workers=max_workers)
+                multithreaded=multithreaded,
+                preserve_posix=preserve_posix)
         else:
             assert isinstance(src_url, str)
             assert isinstance(dst_url, str)
             # both local
-            if no_clobber and pathlib.Path(dst).exists():
+            if no_clobber and pathlib.Path(dst_str).exists():
                 # exists, do not overwrite
                 return
 
-            src_path = pathlib.Path(src)
+            src_path = pathlib.Path(src_str)
             if not src_path.exists():
                 raise ValueError("Source doesn't exist. Cannot copy {} to {}"
-                                 "".format(src, dst))
+                                 "".format(src_str, dst_str))
 
             if src_path.is_file():
-                shutil.copy(src, dst)
+                shutil.copy(src_str, dst_str)
             elif src_path.is_dir():
                 if not recursive:
                     raise ValueError("Source is dir. Cannot copy {} to {} "
                                      "(Did you mean to do "
-                                     "cp recursive?)".format(src, dst))
+                                     "cp recursive?)".format(src_str, dst_str))
 
-                shutil.copytree(src, dst)
+                shutil.copytree(src_str, dst_str)
 
     # pylint: disable=too-many-arguments
     # pylint: disable=too-many-locals
@@ -379,7 +481,7 @@ class Client:
             dst: _GCSURL,
             recursive: bool = False,
             no_clobber: bool = False,
-            max_workers: Optional[int] = 1) -> None:
+            multithreaded: bool = False) -> None:
         """
         Copy blobs from source to destination google cloud URL.
 
@@ -387,14 +489,15 @@ class Client:
         :param dst: destination google cloud URL
         :param recursive: if true also copy files within folders
         :param no_clobber: if true don't overwrite files which already exist
-        :param max_workers:
-            is set default to 1 resp. non-multithreaded. Numbers of worker
-            for multithreading can be freely assigned to any integer number.
-            if max_workers is None, it will default
+        :param multithreaded:
+            is set default to False resp. non-multithreaded.
+            if set to True, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
             instead of CPU work.
         """
+        max_workers = None if multithreaded else 1
+
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
@@ -456,7 +559,8 @@ class Client:
                 dst: _GCSURL,
                 recursive: bool = False,
                 no_clobber: bool = False,
-                max_workers: Optional[int] = 1) -> None:
+                multithreaded: bool = False,
+                preserve_posix: bool = False) -> None:
         """
         Upload objects from local source to google cloud destination.
 
@@ -464,10 +568,9 @@ class Client:
         :param dst: destination google cloud URL
         :param recursive: if true also upload files within folders
         :param no_clobber: if true don't overwrite files which already exist
-        :param max_workers:
-            is set default to 1 resp. non-multithreaded. Numbers of worker
-            for multithreading can be freely assigned to any integer number.
-            if max_workers is None, it will default
+        :param multithreaded:
+            is set default to False resp. non-multithreaded.
+            if set to True, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
             instead of CPU work.
@@ -496,6 +599,8 @@ class Client:
 
         self._change_bucket(bucket_name=dst.bucket)
         bucket = self._bucket
+
+        max_workers = None if multithreaded else 1
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
@@ -529,7 +634,10 @@ class Client:
                 blob = bucket.blob(blob_name=new_name)
                 file_name = pathlib.Path(src) / file
                 upload_thread = executor.submit(
-                    blob.upload_from_filename, filename=file_name.as_posix())
+                    _upload_from_filename,
+                    blob=blob,
+                    filename=file_name.as_posix(),
+                    preserve_posix=preserve_posix)
                 futures.append(upload_thread)
 
         for future in futures:
@@ -543,7 +651,8 @@ class Client:
                   dst: str,
                   recursive: bool = False,
                   no_clobber: bool = False,
-                  max_workers: Optional[int] = 1) -> None:
+                  multithreaded: bool = False,
+                  preserve_posix: bool = False) -> None:
         """
         Download objects from google cloud source to local destination.
 
@@ -551,18 +660,13 @@ class Client:
         :param dst: local destination path
         :param recursive: if yes also download files within folders
         :param no_clobber: if yes don't overwrite files which already exist
-        :param max_workers:
-            is set default to 1 resp. non-multithreaded. Numbers of worker
-            for multithreading can be freely assigned to any integer number.
-            if max_workers is None, it will default
+        :param multithreaded:
+            is set default to False resp. non-multithreaded.
+            if set to True, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
             instead of CPU work.
         """
-        dst_path = pathlib.Path(dst)
-        if not dst_path.exists():
-            dst_path.write_text("create file")
-
         src_prefix_parent = pathlib.Path(src.prefix)
         src_prefix_parent = src_prefix_parent.parent
         src_gcs_prefix_parent = src_prefix_parent.as_posix()
@@ -597,14 +701,22 @@ class Client:
             parent_str = parent_str.replace(src_gcs_prefix_parent, dst)
             parent_dir_set.add(parent_str)
 
+        dst_path = pathlib.Path(dst)
         parent_dir_list = sorted(parent_dir_set)
         for parent_dir in parent_dir_list:
             needed_dirs = pathlib.Path(parent_dir)
             if not needed_dirs.is_file():
+                if not dst.endswith('/') and needed_dirs == dst_path:
+                    dst_path.parent.mkdir(parents=True, exist_ok=True)
+                    dst_path.touch()
+                    continue
+
                 needed_dirs.mkdir(parents=True, exist_ok=True)
 
         blob_iterator = bucket.list_blobs(
             prefix=src_prefix, delimiter=delimiter)
+
+        max_workers = None if multithreaded else 1
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
@@ -615,17 +727,76 @@ class Client:
                     file_name = file_name[1:]
 
                 if dst_path.is_file():
-                    filename = dst_path.as_posix()
+                    filename = dst_path
                 else:
-                    filename = (dst_path / file_name).as_posix()
+                    filename = (dst_path / file_name)
 
                 # skip already existing file to not overwrite it
-                if no_clobber and pathlib.Path(filename).exists():
+                if no_clobber and filename.exists():
                     continue
 
                 download_thread = executor.submit(
-                    file.download_to_filename, filename=filename)
+                    _download_to_filename,
+                    file=file,
+                    filename=filename.as_posix(),
+                    preserve_posix=preserve_posix)
                 futures.append(download_thread)
+
+        for future in futures:
+            future.result()
+
+    def cp_many_to_many(
+            self,
+            srcs_dsts: Sequence[Tuple[Union[str, pathlib.
+                                            Path], Union[str, pathlib.Path]]],
+            recursive: bool = False,
+            no_clobber: bool = False,
+            multithreaded: bool = False,
+            preserve_posix: bool = False):
+        """
+        Copy each source to their destination.
+
+        :param srcs_dsts: source URLs and destination URLs
+        :param recursive:
+            (from https://cloud.google.com/storage/docs/gsutil/commands/cp)
+            Causes directories, buckets, and bucket subdirectories to be copied
+            recursively. If you neglect to use this option for an
+            upload/download, gswrap will raise an exception and inform you that
+            no URL matched. Same behaviour as gsutil as long as no wildcards
+            are used.
+        :param no_clobber:
+            (from https://cloud.google.com/storage/docs/gsutil/commands/cp)
+            When specified, existing files or objects at the destination will
+            not be overwritten.
+        :param multithreaded:
+            is set default to False resp. non-multithreaded.
+            if set to True, it will default
+            to the number of processors on the machine, multiplied by 5,
+            assuming that ThreadPoolExecutor is often used to overlap I/O
+            instead of CPU work.
+        :param preserve_posix:
+            (from https://cloud.google.com/storage/docs/gsutil/commands/cp)
+            Causes POSIX attributes to be preserved when objects are copied.
+            With this feature enabled, gsutil cp will copy fields provided by
+            stat. These are the user ID of the owner, the group ID of the
+            owning group, the mode (permissions) of the file, and the
+            access/modification time of the file. POSIX attributes are always
+            preserved when blob is copied on google cloud storage.
+        """
+        max_workers = None if multithreaded else 1
+        futures = []  # type: List[concurrent.futures.Future]
+        with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max_workers) as executor:
+            for src, dst in srcs_dsts:
+                cp_thread = executor.submit(
+                    self.cp,
+                    src=src,
+                    dst=dst,
+                    recursive=recursive,
+                    no_clobber=no_clobber,
+                    multithreaded=multithreaded,
+                    preserve_posix=preserve_posix)
+                futures.append(cp_thread)
 
         for future in futures:
             future.result()
@@ -634,19 +805,16 @@ class Client:
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
     # pylint: disable=invalid-name
     # pylint: disable=too-many-locals
-    def rm(self,
-           url: str,
-           recursive: bool = False,
-           max_workers: Optional[int] = 1) -> None:
+    def rm(self, url: str, recursive: bool = False,
+           multithreaded: bool = False) -> None:
         """
         Remove blobs at given URL from google cloud storage.
 
         :param url: google cloud storage URL
         :param recursive: if yes remove files within folders
-        :param max_workers:
-            is set default to 1 resp. non-multithreaded. Numbers of worker
-            for multithreading can be freely assigned to any integer number.
-            if max_workers is None, it will default
+        :param multithreaded:
+            is set default to False resp. non-multithreaded.
+            if set to True, it will default
             to the number of processors on the machine, multiplied by 5,
             assuming that ThreadPoolExecutor is often used to overlap I/O
             instead of CPU work.
@@ -682,6 +850,8 @@ class Client:
 
             blob_iterator = bucket.list_blobs(
                 prefix=gcs_url_prefix, delimiter=delimiter)
+
+            max_workers = None if multithreaded else 1
             futures = []  # type: List[concurrent.futures.Future]
             with concurrent.futures.ThreadPoolExecutor(
                     max_workers=max_workers) as executor:
@@ -784,8 +954,41 @@ class Client:
         result.update_time = blob.updated
         result.storage_class = blob.storage_class
         result.content_length = int(blob.size)
-        result.crc32c = blob.crc32c
-        result.md5 = blob.md5_hash
+        result.crc32c = bytes(blob.crc32c, encoding='utf-8')
+        result.md5 = bytes(blob.md5_hash, encoding='utf-8')
+
+        metadata = blob.metadata
+        if metadata is not None:
+            try:
+                result.file_atime = datetime.datetime.utcfromtimestamp(
+                    int(metadata['goog-reserved-file-atime']))
+            except KeyError:
+                logthis.say(
+                    "KeyError while trying to access 'goog-reserved-file-atime'"
+                )
+            try:
+                result.file_mtime = datetime.datetime.utcfromtimestamp(
+                    int(metadata['goog-reserved-file-mtime']))
+            except KeyError:
+                logthis.say(
+                    "KeyError while trying to access 'goog-reserved-file-mtime'"
+                )
+            try:
+                result.posix_uid = metadata['goog-reserved-posix-uid']
+            except KeyError:
+                logthis.say(
+                    "KeyError while trying to access 'goog-reserved-posix-uid'")
+            try:
+                result.posix_gid = metadata['goog-reserved-posix-gid']
+            except KeyError:
+                logthis.say(
+                    "KeyError while trying to access 'goog-reserved-posix-gid'")
+            try:
+                result.posix_mode = metadata['goog-reserved-posix-mode']
+            except KeyError:
+                logthis.say(
+                    "KeyError while trying to access 'goog-reserved-posix-mode'"
+                )
 
         return result
 
@@ -809,11 +1012,14 @@ class Client:
         if url_stat is None:
             raise RuntimeError("The URL does not exist: {}".format(url))
 
-        return dtime == url_stat.update_time
+        return dtime == url_stat.file_mtime
 
+    @icontract.require(lambda url: url.startswith('gs://'))
+    @icontract.require(lambda url: not contains_wildcard(prefix=url))
     def same_md5(self, path: Union[str, pathlib.Path], url: str) -> bool:
         """
         Check if the MD5 differs between the local file and the blob.
+
         :param path: to the local file
         :param url:  to the remote object in Google storage
         :return:
@@ -830,7 +1036,7 @@ class Client:
             return False
 
         hsh = hashlib.md5()
-        block_size = 2 ** 20
+        block_size = 2**20
         with open(pth_str, 'rb') as fid:
             while True:
                 buf = fid.read(block_size)
@@ -838,6 +1044,41 @@ class Client:
                     break
                 hsh.update(buf)
 
-        digest = base64.b64encode(hsh.digest()).decode('utf-8')
+        digest = base64.b64encode(hsh.digest())
 
         return url_stat.md5 == digest
+
+    def md5_hexdigests(self, urls: List[str], multithreaded: bool=False) \
+            -> List[Optional[str]]:
+        """
+        Retrieve hex digests of MD5 checksums for multiple URLs.
+
+        :param urls: URLs to stat and retrieve MD5 of
+        :param multithreaded:
+            is set default to False resp. non-multithreaded.
+            if set to True, it will default
+            to the number of processors on the machine, multiplied by 5,
+            assuming that ThreadPoolExecutor is often used to overlap I/O
+            instead of CPU work.
+        :return: list of hexdigests;
+            if an URL does not exist, the corresponding item is None.
+        """
+        hexdigests = []  # type: List[Optional[str]]
+
+        max_workers = None if multithreaded else 1
+        stat_futures = []  # type: List[concurrent.futures.Future]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
+                as executor:
+            for url in urls:
+                stat_futures.append(executor.submit(self.stat, url=url))
+
+            for stat_future in stat_futures:
+                stat = stat_future.result()
+                hexdigests.append(
+                    base64.b64decode(stat.md5).
+                    hex() if stat is not None else None)
+
+        for future in stat_futures:
+            future.result()
+
+        return hexdigests

@@ -139,6 +139,48 @@ class TestLS(unittest.TestCase):
                 recursive=True)
             self.assertEqual([], self.client.ls(url=test_case, recursive=True))
 
+    def test_long_ls_nonrecursive(self):
+        entries = self.client.long_ls(
+            url=('gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET, self.
+                                         bucket_prefix)))
+
+        self.assertEqual(
+            'gs://{}/{}/d1/f11'.format(tests.common.TEST_GCS_BUCKET,
+                                       self.bucket_prefix), entries[0][0])
+
+        self.assertEqual(
+            len(tests.common.GCS_FILE_CONTENT.encode('utf-8')),
+            entries[0][1].content_length)
+
+        self.assertTrue(entries[0][1].update_time is not None)
+
+        self.assertEqual(
+            'gs://{}/{}/d1/d11/'.format(tests.common.TEST_GCS_BUCKET,
+                                        self.bucket_prefix), entries[1][0])
+
+        self.assertTrue(entries[1][1] is None)
+
+    def test_long_ls_recursive(self):
+        entries = self.client.long_ls(
+            url=('gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET,
+                                         self.bucket_prefix)),
+            recursive=True)
+
+        urls = self.client.ls(
+            url=('gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET,
+                                         self.bucket_prefix)),
+            recursive=True)
+
+        for url, entry in zip(urls, entries):
+
+            self.assertEqual(url, entry[0])
+
+            self.assertEqual(
+                len(tests.common.GCS_FILE_CONTENT.encode('utf-8')),
+                entry[1].content_length)
+
+            self.assertTrue(entry[1].update_time is not None)
+
 
 if __name__ == '__main__':
     unittest.main()
