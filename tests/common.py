@@ -13,9 +13,9 @@ from typing import List
 # https://cloud.google.com/sdk/gcloud/reference/beta/emulators/
 # https://github.com/googleapis/google-cloud-python/issues/4897
 # https://github.com/googleapis/google-cloud-python/issues/4840
-# TODO(snaji): remove
-TEST_GCS_BUCKET = "parquery-sandbox"  # type: str
-TEST_GCS_BUCKET_NO_ACCESS = "parquery-data"  # type: str
+
+TEST_GCS_BUCKET = None  # type: str
+TEST_GCS_BUCKET_NO_ACCESS = None  # type: str
 GCS_FILE_CONTENT = "test file"  # type: str
 
 
@@ -96,6 +96,7 @@ def call_gsutil_ls(path: str, recursive: bool = False) -> List[str]:
 
 
 def call_gsutil_cp(src: str, dst: str, recursive: bool):
+    """Simple wrapper around gsutil cp command used to test the gs-wrap."""
     if recursive:
         cmd = ["gsutil", "-m", "cp", "-r", src, dst]
     else:
@@ -109,6 +110,7 @@ def call_gsutil_cp(src: str, dst: str, recursive: bool):
 
 
 def call_gsutil_rm(path: str, recursive: bool = False):
+    """Simple wrapper around gsutil rm command used to test the gs-wrap."""
     if recursive:
         cmd = ["gsutil", "-m", "rm", "-r", path]
     else:

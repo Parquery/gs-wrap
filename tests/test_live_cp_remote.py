@@ -249,8 +249,8 @@ class TestCPRemote(unittest.TestCase):
         ]
         # yapf: enable
 
-        path_f111 = gswrap.classify(res_loc=test_case[0])
-        path_ff = gswrap.classify(res_loc=test_case[1])
+        path_f111 = gswrap.resource_type(res_loc=test_case[0])
+        path_ff = gswrap.resource_type(res_loc=test_case[1])
         blob_f11 = self.client._bucket.get_blob(path_f111.prefix)
         blob_ff = self.client._bucket.get_blob(path_ff.prefix)
 
@@ -279,8 +279,8 @@ class TestCPRemote(unittest.TestCase):
         ]
         # yapf: enable
 
-        path_f111 = gswrap.classify(res_loc=test_case[0])
-        path_ff = gswrap.classify(res_loc=test_case[1])
+        path_f111 = gswrap.resource_type(res_loc=test_case[0])
+        path_ff = gswrap.resource_type(res_loc=test_case[1])
         blob_f11 = self.client._bucket.get_blob(path_f111.prefix)
         blob_ff = self.client._bucket.get_blob(path_ff.prefix)
 

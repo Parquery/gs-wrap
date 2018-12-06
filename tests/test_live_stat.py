@@ -31,12 +31,11 @@ class TestStat(unittest.TestCase):
 
             url = "gs://{}/{}/file".format(tests.common.TEST_GCS_BUCKET,
                                            self.bucket_prefix)
-
-            subprocess.check_call(
-                ["gsutil", "cp", "-P",
-                 file.path.as_posix(), url])
-
             try:
+                subprocess.check_call(
+                    ["gsutil", "cp", "-P",
+                     file.path.as_posix(), url])
+
                 gcs_stat = self.client.stat(url=url)
                 self.assertIsNotNone(gcs_stat)
 
@@ -63,9 +62,11 @@ class TestStat(unittest.TestCase):
 
             url = "gs://{}/{}/file".format(tests.common.TEST_GCS_BUCKET,
                                            self.bucket_prefix)
-            tests.common.call_gsutil_cp(
-                src=file.path.as_posix(), dst=url, recursive=False)
+
             try:
+                tests.common.call_gsutil_cp(
+                    src=file.path.as_posix(), dst=url, recursive=False)
+
                 self.assertTrue(self.client.same_md5(path=file.path, url=url))
             finally:
                 tests.common.call_gsutil_rm(path=url, recursive=False)
@@ -76,11 +77,13 @@ class TestStat(unittest.TestCase):
 
             url = "gs://{}/{}/file".format(tests.common.TEST_GCS_BUCKET,
                                            self.bucket_prefix)
-            tests.common.call_gsutil_cp(
-                src=file.path.as_posix(), dst=url, recursive=False)
 
-            file.path.write_text("write something more")
             try:
+                tests.common.call_gsutil_cp(
+                    src=file.path.as_posix(), dst=url, recursive=False)
+
+                file.path.write_text("write something more")
+
                 self.assertFalse(self.client.same_md5(path=file.path, url=url))
             finally:
                 tests.common.call_gsutil_rm(path=url, recursive=False)
@@ -101,12 +104,14 @@ class TestStat(unittest.TestCase):
             nonexisting_url = "gs://{}/{}/nonexisting-file".format(
                 tests.common.TEST_GCS_BUCKET, self.bucket_prefix)
 
-            tests.common.call_gsutil_cp(
-                src=path.as_posix(), dst=url, recursive=False)
-            tests.common.call_gsutil_cp(
-                src=another_path.as_posix(), dst=another_url, recursive=False)
-
             try:
+                tests.common.call_gsutil_cp(
+                    src=path.as_posix(), dst=url, recursive=False)
+                tests.common.call_gsutil_cp(
+                    src=another_path.as_posix(),
+                    dst=another_url,
+                    recursive=False)
+
                 self.assertTrue(
                     self.client.same_md5(path=path, url=url),
                     "Expected md5 to be the same, but they were different.")
@@ -137,10 +142,12 @@ class TestStat(unittest.TestCase):
             file.path.write_text(tests.common.GCS_FILE_CONTENT)
             url = "gs://{}/{}/file".format(tests.common.TEST_GCS_BUCKET,
                                            self.bucket_prefix)
-            subprocess.check_call(
-                ["gsutil", "cp", "-P",
-                 file.path.as_posix(), url])
+
             try:
+                subprocess.check_call(
+                    ["gsutil", "cp", "-P",
+                     file.path.as_posix(), url])
+
                 self.assertTrue(
                     self.client.same_modtime(path=file.path, url=url))
             finally:

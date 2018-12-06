@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Test gswrap."""
+"""Test gswrap helper methods."""
 
 # pylint: disable=missing-docstring
 # pylint: disable=protected-access
@@ -30,19 +30,19 @@ class TestGSwrapFunctions(unittest.TestCase):
         self.assertTrue(gswrap.contains_wildcard(prefix=questionmark))
         self.assertTrue(gswrap.contains_wildcard(prefix=double_asterisk))
 
-    def test_gcs_url_decomposition(self):
+    def test_classify_gcs_url(self):
         bucket = 'your-bucket'
         prefix = 'your-dir/sub-dir'
         link = 'gs://' + bucket + '/' + prefix
-        url = gswrap.classify(res_loc=link)
+        url = gswrap.resource_type(res_loc=link)
 
         self.assertTrue(isinstance(url, gswrap._GCSURL))
         self.assertEqual(bucket, url.bucket)
         self.assertEqual(prefix, url.prefix)
 
-    def test_local_url_decomposition(self):
+    def test_classify_local_url(self):
         path = '/home/user/'
-        url = gswrap.classify(res_loc=path)
+        url = gswrap.resource_type(res_loc=path)
 
         self.assertTrue(isinstance(url, str))
         self.assertEqual(path, url)

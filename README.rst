@@ -55,7 +55,10 @@ If both the source and destination URL are cloud URLs from the same provider,
 gsutil copies data "in the cloud" (i.e., without downloading to and uploading
 from the machine where you run gswrap).
 
-.. note:: client.cp() always runs multi-threaded.
+.. note::
+    client.cp() runs by default non-multi-threaded. When multi-threading is
+    activated, the maximum number of workers is the number of processors on the
+    machine, multiplied by 5.
 
 * Copy file within Google Cloud Storage
 
@@ -104,11 +107,11 @@ from the machine where you run gswrap).
     # gs://your-bucket/another-dir/some-dir/file1
     # gs://your-bucket/another-dir/some-dir/dir1/file11
 
-    # choice to copy multi-threaded. (default=1)
-    # max_workers can be set to any integer or None.
-    # None will choose max_workers equal number of processors times 5.
+    # choice to copy multi-threaded. (default=False)
+    # When True, the maximum number of threads is equal the number of
+    # processors times 5.
     client.cp(src="gs://your-bucket/some-dir/",
-    dst="gs://your-bucket/another-dir", recursive=True, max_workers=None)
+    dst="gs://your-bucket/another-dir", recursive=True, multithreaded=True)
     # client.ls(gcs_url=gs://your-bucket/another-dir/, recursive=True)
     # gs://your-bucket/another-dir/file1
     # gs://your-bucket/another-dir/dir1/file11
@@ -160,6 +163,125 @@ from the machine where you run gswrap).
     no_clobber=False)
 
     os.stat("/home/user/storage/file1").st_mtime # 1540889799
+
+* Perform multiple copy operations in one call
+
+.. code-block:: python
+
+    sources_destinations = [
+                    # copy on google cloud storage
+                    ('gs://your-bucket/your-dir/file',
+                    'gs://your-bucket/backup-dir/file'),
+                    # copy from gcs to local
+                    ('gs://your-bucket/your-dir/file',
+                    pathlib.Path('/home/user/storage/backup-file')),
+                    # copy from local to gcs
+                    (pathlib.Path('/home/user/storage/new-file'),
+                    'gs://your-bucket/your-dir/new-file'),
+                    # copy locally
+                    (pathlib.Path('/home/user/storage/file'),
+                    pathlib.Path('/home/user/storage/new-file'))
+                ]
+    client.cp_many_to_many(srcs_dsts=sources_destinations)
+
+* Remove files from google cloud storage
+
+.. code-block:: python
+
+    # existing files:
+    # gs://your-bucket/file
+    client.rm(url="gs://your-bucket/file")
+    # bucket is now empty
+
+    # existing files:
+    # gs://your-bucket/file1
+    # gs://your-bucket/your-dir/file2
+    # gs://your-bucket/your-dir/sub-dir/file3
+    client.rm(url="gs://your-bucket/your-dir", recursive=True)
+    # remaining files:
+    # gs://your-bucket/file1
+
+* Read and write files in google cloud storage
+
+.. code-block:: python
+
+    client.write_text(url:"gs://your-bucket/file", text="Hello, I'm text",
+                     encoding='utf-8')
+    client.read_text(url:"gs://your-bucket/file", encoding='utf-8')
+    # Hello I'm text
+
+    client.write_bytes(url="gs://your-bucket/data",
+                        data="I'm important data".encode('utf-8'))
+
+    data = client.read_bytes(url="gs://your-bucket/data")
+    print(data.decode('utf-8')) # I'm important data
+
+* Copy os.stat() of a file or metadata of a blob
+
+.. note::
+
+    When copying locally [on remote], stats [metadata] are always preserved.
+    **preserve_posix** is only needed when downloading and uploading files.
+
+.. code-block:: python
+
+    file = pathlib.Path('/home/user/storage/file')
+    file.touch()
+    print(file.stat())
+    # os.stat_result(st_mode=33204, st_ino=19022665, st_dev=64769, st_nlink=1,
+    # st_uid=1000, st_gid=1000, st_size=0, st_atime=1544015997,
+    # st_mtime=1544015997, st_ctime=1544015997)
+
+    # upload without preserve_posix
+    client.cp(src=pathlib.Path('/home/user/storage/file'),
+                dst="gs://your-bucket/file")
+
+    stats = client.stat(url="gs://your-bucket/file")
+    stats.creation_time  # 2018-11-21 13:27:46.255000+00:00
+    stats.update_time  # 2018-11-21 13:27:46.255000+00:00
+    stats.content_length  # 1024 [bytes]
+    stats.storage_class  # REGIONAL
+    stats.file_atime  # None
+    stats.file_mtime  # None
+    stats.posix_uid  # None
+    stats.posix_gid  # None
+    stats.posix_mode  # None
+    stats.md5  # b'1B2M2Y8AsgTpgAmY7PhCfg=='
+    stats.crc32c  # b'AAAAAA=='
+
+    # upload with preserve_posix also copies POSIX arguments to blob
+    # also works for downloading
+
+    client.cp(src=pathlib.Path('/home/user/storage/file'),
+                dst="gs://your-bucket/file", preserve_posix=True)
+
+    stats = client.stat(url="gs://your-bucket/file")
+    stats.creation_time  # 2018-11-21 13:27:46.255000+00:00
+    stats.update_time  # 2018-11-21 13:27:46.255000+00:00
+    stats.content_length  # 1024 [bytes]
+    stats.storage_class  # REGIONAL
+    stats.file_atime  # 2018-11-21 13:27:46
+    stats.file_mtime  # 2018-11-21 13:27:46
+    stats.posix_uid  # 1000
+    stats.posix_gid  # 1000
+    stats.posix_mode  # 777
+    stats.md5  # b'1B2M2Y8AsgTpgAmY7PhCfg=='
+    stats.crc32c  # b'AAAAAA=='
+
+* Check correctness of copied file
+
+.. code-block:: python
+
+    # check modification time when copied with preserve_posix
+    client.same_modtime(path='/home/user/storage/file',
+                        url='gs://your-bucket/file')
+
+    # check md5 hash to ensure content equality
+    client.same_md5(path='/home/user/storage/file', url='gs://your-bucket/file')
+
+    # retrieves hex digests of MD5 checksums for multiple URLs.
+    urls = ['gs://your-bucket/file1', 'gs://your-bucket/file2']
+    client.md5_hexdigests(urls=urls, multithreaded=False)
 
 Installation
 ============

@@ -39,7 +39,7 @@ coverage.xml
 .pytest_cache/
 
 # Sphinx documentation
-docs/_build/
+docs/build/
 
 # pyenv
 .python-version
@@ -60,3 +60,6 @@ venv-doc/
 
 # IDE
 .idea
+
+# Archive
+obsolete/

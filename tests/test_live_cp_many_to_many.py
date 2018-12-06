@@ -10,7 +10,7 @@ import pathlib
 import tempfile
 import unittest
 import uuid
-from typing import Sequence, Tuple, Union  # pylint: disable=unused-import
+from typing import Sequence, Tuple  # pylint: disable=unused-import
 
 import gswrap
 import tests.common
@@ -29,44 +29,49 @@ class TestCPManyToMany(unittest.TestCase):
         self.tmp_dir.cleanup()
 
     def test_cp_remote_many_to_many(self):
-        test_cases = [('gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET,
-                                               self.bucket_prefix),
-                       'gs://{}/{}/d1-many-to-many'.format(
-                           tests.common.TEST_GCS_BUCKET, self.bucket_prefix)),
-                      ('gs://{}/{}/d1/f11'.format(tests.common.TEST_GCS_BUCKET,
-                                                  self.bucket_prefix),
-                       'gs://{}/{}/d1-many-to-many/files/f11'.format(
-                           tests.common.TEST_GCS_BUCKET, self.bucket_prefix))] \
-            # type:Sequence[Tuple[str, pathlib.Path]]
+        gcs_bucket = 'gs://{}'.format(tests.common.TEST_GCS_BUCKET)
+        prefix = self.bucket_prefix
+        # yapf: disable
+        test_cases = [
+            (
+                '{}/{}/d1/'.format(gcs_bucket, prefix),
+                '{}/{}/d1-m2many'.format(gcs_bucket, prefix)
+            ),
+            (
+                '{}/{}/d1/f11'.format(gcs_bucket, prefix),
+                '{}/{}/d1-m2many/files/f11'.format(gcs_bucket, prefix)
+            )
+        ]  # type:Sequence[Tuple[str, pathlib.Path]]
+        # yapf: enable
 
         self.client.cp_many_to_many(srcs_dsts=test_cases, recursive=True)
 
-        self.assertEqual(
-            4,
-            len(
-                tests.common.call_gsutil_ls(
-                    path='gs://{}/{}/d1-many-to-many'.format(
-                        tests.common.TEST_GCS_BUCKET, self.bucket_prefix),
-                    recursive=True)))
+        # yapf: disable
+        self.assertEqual(4, len(tests.common.call_gsutil_ls(
+            path='{}/{}/d1-m2many'.format(gcs_bucket, prefix), recursive=True)))
+        # yapf: enable
 
     def test_cp_download_many_to_many(self):
-        test_cases = [('gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET,
-                                               self.bucket_prefix),
-                       pathlib.Path('{}/{}/d1-many-to-many'.format(
-                           self.tmp_dir, self.bucket_prefix))),
-                      ('gs://{}/{}/d1/f11'.format(tests.common.TEST_GCS_BUCKET,
-                                                  self.bucket_prefix),
-                       pathlib.Path('{}/{}/d1-many-to-many/files/f11'.format(
-                           self.tmp_dir, self.bucket_prefix)))] \
-            # type:Sequence[Tuple[str, pathlib.Path]]
+        gcs_bucket = 'gs://{}'.format(tests.common.TEST_GCS_BUCKET)
+        prefix = self.bucket_prefix
+        tmp_dir = self.tmp_dir.name
+        # yapf: disable
+        test_cases = [
+            (
+                '{}/{}/d1/'.format(gcs_bucket, prefix),
+                pathlib.Path('{}/{}/d1-m2many'.format(tmp_dir, prefix))),
+            (
+                '{}/{}/d1/f11'.format(gcs_bucket, prefix),
+                pathlib.Path('{}/{}/d1-m2many/files/f11'.format(tmp_dir, prefix)
+                             ))]  # type:Sequence[Tuple[str, pathlib.Path]]
+        # yapf: enable
 
         self.client.cp_many_to_many(srcs_dsts=test_cases, recursive=True)
 
-        self.assertEqual(
-            4,
-            len(
-                tests.common.ls_local(path='{}/{}/d1-many-to-many'.format(
-                    self.tmp_dir, self.bucket_prefix))))
+        # yapf: disable
+        self.assertEqual(4, len(tests.common.ls_local(
+            path='{}/{}/d1-m2many'.format(self.tmp_dir.name, prefix))))
+        # yapf: enable
 
 
 if __name__ == '__main__':
