@@ -294,11 +294,16 @@ def _download_to_path(blob: google.cloud.storage.blob.Blob,
         if true then copy blob metadata to file stats, else os.stat will differ
     :return:
     """
-    path_str = path if isinstance(path, str) else path.as_posix()
-    blob.download_to_filename(filename=path_str)
+    local_pth = path if isinstance(path, pathlib.Path) else pathlib.Path(path)
+
+    parent = pathlib.Path(local_pth.parent)
+    # exist_ok because another thread might be faster creating the directory
+    parent.mkdir(parents=True, exist_ok=True)
+
+    blob.download_to_filename(filename=local_pth.as_posix())
 
     if preserve_posix:
-        _blob_metadata_to_os_stat(path=path_str, blob=blob)
+        _blob_metadata_to_os_stat(path=local_pth.as_posix(), blob=blob)
 
 
 class Client:
@@ -733,8 +738,6 @@ class Client:
         src_prefix_parent = src_prefix_parent.parent
         src_gcs_prefix_parent = src_prefix_parent.as_posix()
 
-        parent_dir_set = set()
-
         if recursive:
             delimiter = ''
         else:
@@ -754,27 +757,7 @@ class Client:
         if num_items == 0:
             raise google.api_core.exceptions.GoogleAPIError('No URLs matched')
 
-        blob_dir_iterator = bucket.list_blobs(
-            prefix=src_prefix, delimiter=delimiter)
-        for blob in blob_dir_iterator:
-            blob_path = pathlib.Path(blob.name)
-            parent = blob_path.parent
-            parent_str = parent.as_posix()
-            parent_str = parent_str.replace(src_gcs_prefix_parent, dst)
-            parent_dir_set.add(parent_str)
-
         dst_path = pathlib.Path(dst)
-        parent_dir_list = sorted(parent_dir_set)
-        for parent_dir in parent_dir_list:
-            needed_dirs = pathlib.Path(parent_dir)
-            if not needed_dirs.is_file():
-                if not dst.endswith('/') and needed_dirs == dst_path:
-                    dst_path.parent.mkdir(parents=True, exist_ok=True)
-                    dst_path.touch()
-                    continue
-
-                needed_dirs.mkdir(parents=True, exist_ok=True)
-
         blob_iterator = bucket.list_blobs(
             prefix=src_prefix, delimiter=delimiter)
 
@@ -789,7 +772,8 @@ class Client:
                 if file_name.startswith('/'):
                     file_name = file_name[1:]
 
-                if dst_path.is_file():
+                # check if file_name has no subdirectory
+                if file_name.find('/') == -1:
                     file_path = dst_path
                 else:
                     file_path = dst_path / file_name
