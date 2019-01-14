@@ -1,7 +1,7 @@
 """Define meta information about gs-wrap package."""
 
 __title__ = 'gs-wrap'
-__description__ = 'gs-wrap wraps Google Cloud Storage API for simpler and multi-threaded handling of objects.'
+__description__ = 'gs-wrap wraps Google Cloud Storage API for simple and multi-threaded handling of objects.'
 __url__ = 'https://github.com/Parquery/gs-wrap'
 __version__ = '1.0.0'
 __author__ = 'Selim Naji, Adam Radomski and Marko Ristin'

@@ -270,6 +270,8 @@ class TestCPUploadNoCommonSetup(unittest.TestCase):
             text_other_file = content_other_file.download_as_string()
             self.assertEqual(b'hello', text)
             self.assertEqual(b'hello', text_other_file)
+            content.delete()
+            content_other_file.delete()
 
     def test_upload_preserved_posix(self):
         with temppathlib.NamedTemporaryFile() as file:

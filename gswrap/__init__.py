@@ -53,6 +53,20 @@ def resource_type(res_loc: str) -> Union[_GCSURL, str]:
     """
     Determine resource type.
 
+    >>> url = resource_type(res_loc='gs://your-bucket/some-dir/file')
+    >>> isinstance(url, _GCSURL)
+    True
+    >>> url.bucket
+    'your-bucket'
+    >>> url.prefix
+    'some-dir/file'
+
+    >>> path = resource_type(res_loc='/home/user/work/file')
+    >>> path
+    '/home/user/work/file'
+    >>> isinstance(path, str)
+    True
+
     :param res_loc: resource location
     :return: class corresponding to the file/directory location
     """
@@ -74,6 +88,11 @@ _WILDCARDS_RE = re.compile(r'(\*\*|\*|\?|\[[^]]+\])')
 def contains_wildcard(prefix: str) -> bool:
     """
     Check if prefix contains any wildcards.
+
+    >>> contains_wildcard(prefix='gs://your-bucket/some-dir/file')
+    False
+    >>> contains_wildcard(prefix='gs://your-bucket/*/file')
+    True
 
     :param prefix: path to a file or a directory
     :return:
@@ -457,25 +476,31 @@ class Client:
             no URL matched. Same behaviour as gsutil as long as no wildcards
             are used.
 
+            | your-bucket before:
+            | "empty"
+
             | client.cp(src="gs://your-bucket/some-dir/",
             | dst="gs://your-bucket/another-dir/", recursive=False)
+
             | # google.api_core.exceptions.GoogleAPIError: No URLs matched
 
-            | # client.ls(url=gs://your-bucket/some-dir/, recursive=True)
+            | current some-dir:
             | # gs://your-bucket/some-dir/file1
             | # gs://your-bucket/some-dir/dir1/file11
 
             | # destination URL without slash
             | client.cp(src="gs://your-bucket/some-dir/",
             | dst="gs://your-bucket/another-dir", recursive=True)
-            | # client.ls(url=gs://your-bucket/another-dir/, recursive=True)
+
+            | # another-dir after:
             | # gs://your-bucket/another-dir/file1
             | # gs://your-bucket/another-dir/dir1/file11
 
             | # destination URL with slash
             | client.cp(src="gs://your-bucket/some-dir/",
             | dst="gs://your-bucket/another-dir/", recursive=True)
-            | # client.ls(url=gs://your-bucket/another-dir/, recursive=True)
+
+            | # another-dir after:
             | # gs://your-bucket/another-dir/some-dir/file1
             | # gs://your-bucket/another-dir/some-dir/dir1/file11
         :param no_clobber:
@@ -1088,7 +1113,7 @@ class Client:
 
         return url_stat.md5 == local_md5
 
-    def md5_hexdigests(self, urls: List[str], multithreaded: bool=False) \
+    def md5_hexdigests(self, urls: List[str], multithreaded: bool = False) \
             -> List[Optional[str]]:
         """
         Retrieve hex digests of MD5 checksums for multiple URLs.
