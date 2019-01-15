@@ -1,13 +1,50 @@
 gswrap
 ======
 
-gs-wrap wraps Google Cloud Storage API for simpler and multi-threaded handling
-of objects.
+.. image:: https://badges.frapsoft.com/os/mit/mit.png?v=103
+    :target: https://opensource.org/licenses/mit-license.php
+    :alt: MIT License
+
+.. image:: https://badge.fury.io/py/gs-wrap.svg
+    :target: https://badge.fury.io/py/gs-wrap
+    :alt: PyPI - version
+
+.. image:: https://img.shields.io/pypi/pyversions/gs-wrap.svg
+    :alt: PyPI - Python Version
+
+.. image:: https://readthedocs.org/projects/gs-wrap/badge/?version=latest
+    :target: https://gs-wrap.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
+
+``gs-wrap`` wraps Google Cloud Storage API for simple and multi-threaded
+handling of objects. It provides a set of data manipulation commands including
+copying, reading, writing and hashing stored data.
+
+We primarly needed a library that is quicker than our previous solution
+`gsutilwrap <https://github.com/Parquery/gsutilwrap/>`_
+at copying many objects from many locations to many other locations. For the
+other methods it also had to achieve equivalent results as gsutilwrap.
+``Gsutilwrap``  is simply wrapping the ``gsutil`` command-line interface in
+order to simplify the deployment and backup tasks related to Google Cloud
+Storage.
+
+The `google-cloud-storage
+<https://github.com/googleapis/google-cloud-python/tree/master/storage/>`_
+provided by Google offers sophisticated features and good performance, but the
+usage differentiate from ``gsutil`` general usage and behaviour. ``gs-wrap``
+wraps ``google-cloud-storage`` in its core and it behaves as you would expect
+from ``gsutil``.
+
+Other related projects
+----------------------
+
+* simple library `cloud-storage-client <https://github.com/Rakanixu/cloud-storage-client/>`_ to connect with S3 storage and Google Cloud storage
 
 Usage
 =====
 
-* Connect to your Google Cloud Storage bucket
+Connect to your Google Cloud Storage bucket
+-------------------------------------------
 
 The **project** which the client acts on behalf of. Will be passed when
 creating a topic. If not passed, falls back to the default inferred from the
@@ -26,7 +63,8 @@ in the same project.
     # or
     client = gswrap.Client(project="project-name", bucket_name="my-bucket")
 
-* List objects in your bucket
+List objects in your bucket
+---------------------------
 
 .. warning::
 
@@ -49,7 +87,8 @@ in the same project.
     # gs://your-bucket/your-dir/your-subdir2/file1
     # gs://your-bucket/your-dir/file1
 
-* Copy objects within Google Cloud Storage
+Copy objects within Google Cloud Storage
+----------------------------------------
 
 If both the source and destination URL are cloud URLs from the same provider,
 gsutil copies data "in the cloud" (i.e., without downloading to and uploading
@@ -60,63 +99,66 @@ from the machine where you run gswrap).
     activated, the maximum number of workers is the number of processors on the
     machine, multiplied by 5.
 
-* Copy file within Google Cloud Storage
+Copy file within Google Cloud Storage
+-------------------------------------
 
 .. code-block:: python
 
-    # client.ls("gs://your-bucket/", recursive=True):
+    # your-bucket before:
     # gs://your-bucket/file1
     client.cp(src="gs://your-bucket/file1",
               dst="gs://your-bucket/your-dir/",
               recursive=True)
-    # client.ls("gs://your-bucket/", recursive=True):
+    # your-bucket after:
     # gs://your-bucket/file1
     # gs://your-bucket/your-dir/file1
 
-    # client.ls("gs://your-backup-bucket/", recursive=True):
+    # your-backup-bucket before:
     # "empty"
     client.cp(src="gs://your-bucket/file1",
               dst="gs://your-backup-bucket/backup-file1",
               recursive=False)
-    # client.ls("gs://your-backup-bucket/"):
+    # your-backup-bucket after:
     # gs://your-backup-bucket/backup-file1
 
-* Copy directory within Google Cloud Storage
+Copy directory within Google Cloud Storage
+------------------------------------------
 
 .. code-block:: python
 
+    # your-bucket before:
+    # "empty"
     client.cp(src="gs://your-bucket/some-dir/",
     dst="gs://your-bucket/another-dir/", recursive=False)
     # google.api_core.exceptions.GoogleAPIError: No URLs matched
 
-    # client.ls(gcs_url=gs://your-bucket/some-dir/, recursive=True)
+    # your-bucket before:
     # gs://your-bucket/some-dir/file1
     # gs://your-bucket/some-dir/dir1/file11
 
     # destination URL without slash
     client.cp(src="gs://your-bucket/some-dir/",
     dst="gs://your-bucket/another-dir", recursive=True)
-    # client.ls(gcs_url=gs://your-bucket/another-dir/, recursive=True)
+    # your-bucket after:
     # gs://your-bucket/another-dir/file1
     # gs://your-bucket/another-dir/dir1/file11
 
     # destination URL with slash
     client.cp(src="gs://your-bucket/some-dir/",
     dst="gs://your-bucket/another-dir/", recursive=True)
-    # client.ls(gcs_url=gs://your-bucket/another-dir/, recursive=True)
+    # your-bucket after:
     # gs://your-bucket/another-dir/some-dir/file1
     # gs://your-bucket/another-dir/some-dir/dir1/file11
 
     # choice to copy multi-threaded. (default=False)
-    # When True, the maximum number of threads is equal the number of
-    # processors times 5.
     client.cp(src="gs://your-bucket/some-dir/",
     dst="gs://your-bucket/another-dir", recursive=True, multithreaded=True)
-    # client.ls(gcs_url=gs://your-bucket/another-dir/, recursive=True)
+    # your-bucket after:
     # gs://your-bucket/another-dir/file1
     # gs://your-bucket/another-dir/dir1/file11
 
-* Upload objects to Google Cloud Storage
+Upload objects to Google Cloud Storage
+--------------------------------------
 
 .. note::
 
@@ -127,18 +169,21 @@ from the machine where you run gswrap).
 
 .. code-block:: python
 
-    # local directory:
+    # your local directory:
     # /home/user/storage/file1
     # /home/user/storage/file2
+    # your-bucket before:
+    # "empty"
 
     client.cp(src="/home/user/storage/",
               dst="gs://your-bucket/local/",
               recursive=True)
-    # client.ls("gs://your-bucket/", recursive=True):
+    # your-bucket after:
     # gs://your-bucket/local/storage/file1
     # gs://your-bucket/local/storage/file2
 
-* Download objects from Google Cloud Storage
+Download objects from Google Cloud Storage
+------------------------------------------
 
 .. note::
 
@@ -164,7 +209,8 @@ from the machine where you run gswrap).
 
     os.stat("/home/user/storage/file1").st_mtime # 1540889799
 
-* Perform multiple copy operations in one call
+Perform multiple copy operations in one call
+--------------------------------------------
 
 .. code-block:: python
 
@@ -184,7 +230,8 @@ from the machine where you run gswrap).
                 ]
     client.cp_many_to_many(srcs_dsts=sources_destinations)
 
-* Remove files from google cloud storage
+Remove files from google cloud storage
+--------------------------------------
 
 .. code-block:: python
 
@@ -201,7 +248,8 @@ from the machine where you run gswrap).
     # remaining files:
     # gs://your-bucket/file1
 
-* Read and write files in google cloud storage
+Read and write files in google cloud storage
+--------------------------------------------
 
 .. code-block:: python
 
@@ -216,7 +264,8 @@ from the machine where you run gswrap).
     data = client.read_bytes(url="gs://your-bucket/data")
     print(data.decode('utf-8')) # I'm important data
 
-* Copy os.stat() of a file or metadata of a blob
+Copy os.stat() of a file or metadata of a blob
+----------------------------------------------
 
 .. note::
 
@@ -268,7 +317,8 @@ from the machine where you run gswrap).
     stats.md5  # b'1B2M2Y8AsgTpgAmY7PhCfg=='
     stats.crc32c  # b'AAAAAA=='
 
-* Check correctness of copied file
+Check correctness of copied file
+--------------------------------
 
 .. code-block:: python
 
@@ -282,6 +332,21 @@ from the machine where you run gswrap).
     # retrieves hex digests of MD5 checksums for multiple URLs.
     urls = ['gs://your-bucket/file1', 'gs://your-bucket/file2']
     client.md5_hexdigests(urls=urls, multithreaded=False)
+
+Documentation
+=============
+The documentation is available on `readthedocs
+<https://gs-wrap.readthedocs.io/en/latest/>`_.
+
+Quick Start
+===========
+
+In order to use this library, you first need to go through the following steps:
+
+1. `Select or create a Cloud Platform project. <https://console.cloud.google.com/project>`_
+2. `Enable billing for your project. <https://console.cloud.google.com/project>`_
+3. `Enable the Google Cloud Storage API. <https://cloud.google.com/storage>`_
+4. `Setup Authentication using the Google Cloud SDK. <https://googlecloudplatform.github.io/google-cloud-python/latest/core/auth.html>`_
 
 Installation
 ============
@@ -338,8 +403,10 @@ Namely, we use:
 * `isort <https://github.com/timothycrosley/isort>`_ to sort your imports for you.
 * Various linter checks are done with `pylint <https://www.pylint.org/>`_.
 * Doctests are executed using the Python `doctest module <https://docs.python.org/3.5/library/doctest.html>`_.
+* `pyicontract-lint <https://github.com/Parquery/pyicontract-lint/>`_ lints contracts in Python code defined with `icontract library <https://github.com/Parquery/icontract/>`_.
 
-Run the pre-commit checks locally from an activated virtual environment with development dependencies:
+Run the pre-commit checks locally from an activated virtual environment with
+development dependencies:
 
 .. code-block:: bash
 
@@ -351,10 +418,116 @@ Run the pre-commit checks locally from an activated virtual environment with dev
 
     ./precommit.py  --overwrite
 
+Benchmarks
+----------
+
+Assuming that the virtual environment has been activated and the development
+dependencies have been installed, run the benchmarks with:
+
+.. code-block:: bash
+
+    ./benchmark/main.py *NAME OF YOUR GCS BUCKET*
+
+Some of our benchmark results:
+
+.. code-block:: text
+
+    Benchmark list 10000 files:
+    +------------+----------------------+----------------------+
+    |   Tested   |         Time         |       SpeedUp        |
+    +------------+----------------------+----------------------+
+    |   gswrap   | 3.5658528804779053 s |          -           |
+    | gsutilwrap | 4.134420871734619 s  | 1.1594479666756505 x |
+    +------------+----------------------+----------------------+
+
+    Benchmark upload 10000 files:
+    +------------+---------------------+----------------------+
+    |   Tested   |         Time        |       SpeedUp        |
+    +------------+---------------------+----------------------+
+    |   gswrap   | 39.73294186592102 s |          -           |
+    | gsutilwrap | 70.75882768630981 s | 1.7808605243751086 x |
+    +------------+---------------------+----------------------+
+
+    Benchmark upload-many-to-many 500 files:
+    +------------+----------------------+---------------------+
+    |   Tested   |         Time         |       SpeedUp       |
+    +------------+----------------------+---------------------+
+    |   gswrap   | 1.8486201763153076 s |          -          |
+    | gsutilwrap | 62.999937534332275 s | 34.07943845982712 x |
+    +------------+----------------------+---------------------+
+
+    Benchmark download 10000 files:
+    +------------+----------------------+----------------------+
+    |   Tested   |         Time         |       SpeedUp        |
+    +------------+----------------------+----------------------+
+    |   gswrap   | 31.36532688140869 s  |          -           |
+    | gsutilwrap | 37.959198236465454 s | 1.2102280451272829 x |
+    +------------+----------------------+----------------------+
+
+    Benchmark download-many-to-many 500 files:
+    +------------+---------------------+----------------------+
+    |   Tested   |         Time        |       SpeedUp        |
+    +------------+---------------------+----------------------+
+    |   gswrap   | 5.657044172286987 s |          -           |
+    | gsutilwrap |  66.4119668006897 s | 11.739693871586152 x |
+    +------------+---------------------+----------------------+
+
+    Benchmark copy on remote 1000 files:
+    +------------+---------------------+----------------------+
+    |   Tested   |         Time        |       SpeedUp        |
+    +------------+---------------------+----------------------+
+    |   gswrap   | 5.135300636291504 s |          -           |
+    | gsutilwrap | 4.578975439071655 s | 0.8916664794095477 x |
+    +------------+---------------------+----------------------+
+
+    Benchmark copy-many-to-many-on-remote 500 files:
+    +------------+---------------------+----------------------+
+    |   Tested   |         Time        |       SpeedUp        |
+    +------------+---------------------+----------------------+
+    |   gswrap   |  6.0890212059021 s  |          -           |
+    | gsutilwrap | 70.82826447486877 s | 11.632126425543534 x |
+    +------------+---------------------+----------------------+
+
+    Benchmark remove 1000 files:
+    +------------+----------------------+----------------------+
+    |   Tested   |         Time         |       SpeedUp        |
+    +------------+----------------------+----------------------+
+    |   gswrap   | 4.313004016876221 s  |          -           |
+    | gsutilwrap | 3.3785297870635986 s | 0.7833356458384582 x |
+    +------------+----------------------+----------------------+
+
+    Benchmark read 100 files:
+    +------------+----------------------+---------------------+
+    |   Tested   |         Time         |       SpeedUp       |
+    +------------+----------------------+---------------------+
+    |   gswrap   | 15.238682746887207 s |          -          |
+    | gsutilwrap | 63.807496309280396 s | 4.187205506480821 x |
+    +------------+----------------------+---------------------+
+
+    Benchmark write 30 files:
+    +------------+----------------------+--------------------+
+    |   Tested   |         Time         |      SpeedUp       |
+    +------------+----------------------+--------------------+
+    |   gswrap   | 2.485429286956787 s  |         -          |
+    | gsutilwrap | 26.244182109832764 s | 10.5592149603929 x |
+    +------------+----------------------+--------------------+
+
+    Benchmark stat 100 files:
+    +------------+---------------------+---------------------+
+    |   Tested   |         Time        |       SpeedUp       |
+    +------------+---------------------+---------------------+
+    |   gswrap   | 5.907729625701904 s |          -          |
+    | gsutilwrap | 45.99751901626587 s | 7.785989192218804 x |
+    +------------+---------------------+---------------------+
+
+
+All results of our benchmarks can be found `here
+<https://github.com/Parquery/gs-wrap/blob/master/benchmark/benchmark_results>`_.
 
 Versioning
 ==========
-We follow `Semantic Versioning <http://semver.org/spec/v1.0.0.html>`_. The version X.Y.Z indicates:
+We follow `Semantic Versioning <http://semver.org/spec/v1.0.0.html>`_.
+The version X.Y.Z indicates:
 
 * X is the major version (backward-incompatible),
 * Y is the minor version (backward-compatible), and
