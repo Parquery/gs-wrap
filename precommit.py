@@ -30,24 +30,27 @@ def main() -> int:
     if overwrite:
         subprocess.check_call([
             "yapf", "--in-place", "--style=style.yapf", "--recursive", "tests",
-            "gswrap", "setup.py", "precommit.py"
+            "gswrap", "benchmark", "setup.py", "precommit.py"
         ],
                               cwd=repo_root.as_posix())
     else:
         subprocess.check_call([
             "yapf", "--diff", "--style=style.yapf", "--recursive", "tests",
-            "gswrap", "bin", "setup.py", "precommit.py"
+            "gswrap", "bin", "benchmark", "setup.py", "precommit.py"
         ],
                               cwd=repo_root.as_posix())
 
     print("Mypy'ing...")
-    subprocess.check_call(["mypy", "gswrap", "tests"], cwd=repo_root.as_posix())
+    subprocess.check_call(["mypy", "gswrap", "tests", "benchmark"],
+                          cwd=repo_root.as_posix())
 
     print("Isort'ing...")
     isort_files = []  # type: List[str]
     for path in (repo_root / "gswrap").glob("**/*.py"):
         isort_files.append(path.as_posix())
     for path in (repo_root / "tests").glob("**/*.py"):
+        isort_files.append(path.as_posix())
+    for path in (repo_root / "benchmark").glob("**/*.py"):
         isort_files.append(path.as_posix())
 
     if overwrite:
@@ -67,8 +70,9 @@ def main() -> int:
         subprocess.check_call(cmd)
 
     print("Pylint'ing...")
-    subprocess.check_call(["pylint", "--rcfile=pylint.rc", "tests", "gswrap"],
-                          cwd=repo_root.as_posix())
+    subprocess.check_call(
+        ["pylint", "--rcfile=pylint.rc", "tests", "gswrap", "benchmark"],
+        cwd=repo_root.as_posix())
 
     print("Pydocstyle'ing...")
     subprocess.check_call(["pydocstyle", "gswrap"], cwd=repo_root.as_posix())

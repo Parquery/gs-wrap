@@ -52,8 +52,10 @@ setup(
             'docutils>=0.14,<1',
             'isort>=4.3.4,<5',
             'pygments>=2.3.1,<3',
+            'prettytable>=0.7.2, <1',
             'temppathlib>=1.0.3,<2',
             'logthis>=1.0.1,<2',
+            'gsutilwrap>=1.1.2,<2'
             # yapf: enable
         ]
     },
