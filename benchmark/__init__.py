@@ -104,7 +104,8 @@ def _gswrap_list_for_cp_many_to_many(client: gswrap.Client, src: str,
     return srcs_dsts
 
 
-def _gsutilwrap_list_for_cp_many_to_many(src: str, dst: str)-> List[Tuple[str, str]]:
+def _gsutilwrap_list_for_cp_many_to_many(src: str,
+                                         dst: str) -> List[Tuple[str, str]]:
     lst = gsutilwrap.ls(src + "**")
     srcs_dsts = []
     for file in lst:
@@ -132,9 +133,8 @@ def _gsutilwrap_download_many_to_many_setup(src: str, dst: str) \
     return srcs_dsts
 
 
-def _gswrap_copy_many_to_many_files(
-        client: gswrap.Client, srcs_dsts: List[
-            Tuple[Union[pathlib.Path, str], Union[pathlib.Path, str]]]) -> None:
+def _gswrap_copy_many_to_many_files(client: gswrap.Client, srcs_dsts: List[
+        Tuple[Union[pathlib.Path, str], Union[pathlib.Path, str]]]) -> None:
 
     client.cp_many_to_many(
         srcs_dsts=srcs_dsts, recursive=True, multithreaded=True)
@@ -285,8 +285,6 @@ class Benchmark:
                                        time_gsutilwrap)],
                 time_gswrap=time_gswrap)
 
-# TODO(snaji): check
-
     def benchmark_upload_many_to_many(self) -> None:
         for testcase in [10, 100, 500]:
             with temppathlib.TemporaryDirectory() as tmp_dir:
@@ -351,7 +349,6 @@ class Benchmark:
                                        time_gsutilwrap)],
                 time_gswrap=time_gswrap)
 
-# TODO(snaji): check
     def benchmark_download_many_to_many(self) -> None:
         for testcase in [10, 100, 500]:
             with temppathlib.TemporaryDirectory() as tmp_dir:
@@ -426,7 +423,6 @@ class Benchmark:
                                        time_gsutilwrap)],
                 time_gswrap=time_gswrap)
 
-# TODO(snaji): check
     def benchmark_copy_many_to_many_on_remote(self) -> None:
         for testcase in [10, 100, 500]:
             with temppathlib.TemporaryDirectory() as tmp_dir:
@@ -441,15 +437,19 @@ class Benchmark:
 
                     client = gswrap.Client(bucket_name=self.bucket)
                     srcs_dsts = _gswrap_list_for_cp_many_to_many(
-                        client=client, src=self.url_prefix,
+                        client=client,
+                        src=self.url_prefix,
                         dst=copy_url + "/gswrap")
-                    time_gswrap = timer(_gswrap_copy_many_to_many_files,
-                                        client=client, srcs_dsts=srcs_dsts)
+                    time_gswrap = timer(
+                        _gswrap_copy_many_to_many_files,
+                        client=client,
+                        srcs_dsts=srcs_dsts)
 
                     srcs_dsts = _gsutilwrap_list_for_cp_many_to_many(
                         src=self.url_prefix, dst=copy_url + "/gsutil")
-                    time_gsutilwrap = timer(_gsutilwrap_copy_many_to_many_files,
-                                            srcs_dsts=srcs_dsts)
+                    time_gsutilwrap = timer(
+                        _gsutilwrap_copy_many_to_many_files,
+                        srcs_dsts=srcs_dsts)
                 finally:
                     _tear_down(url=self.url_prefix)
                     _tear_down(url=copy_url)

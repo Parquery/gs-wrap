@@ -404,6 +404,7 @@ Namely, we use:
 * Various linter checks are done with `pylint <https://www.pylint.org/>`_.
 * Doctests are executed using the Python `doctest module <https://docs.python.org/3.5/library/doctest.html>`_.
 * `pyicontract-lint <https://github.com/Parquery/pyicontract-lint/>`_ lints contracts in Python code defined with `icontract library <https://github.com/Parquery/icontract/>`_.
+* `twine <https://pypi.org/project/twine/>`_ checks the README for invalid markup which will prevent it from rendering on PyPI.
 
 Run the pre-commit checks locally from an activated virtual environment with
 development dependencies:
@@ -421,8 +422,9 @@ development dependencies:
 Benchmarks
 ----------
 
-Assuming that the virtual environment has been activated and the development
-dependencies have been installed, run the benchmarks with:
+Assuming that the virtual environment has been activated, the development
+dependencies have been installed and the ``PYTHONPATH`` has been set to the
+project directory, run the benchmarks with:
 
 .. code-block:: bash
 

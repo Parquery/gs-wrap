@@ -8,7 +8,7 @@ import pathlib
 import subprocess
 from typing import List
 
-# test enviroment bucket
+# test environment bucket
 # No google cloud storage emulator at this point of time [2018-10-31]
 # https://cloud.google.com/sdk/gcloud/reference/beta/emulators/
 # https://github.com/googleapis/google-cloud-python/issues/4897
