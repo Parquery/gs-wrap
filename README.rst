@@ -16,29 +16,30 @@ gswrap
     :target: https://gs-wrap.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-``gs-wrap`` wraps Google Cloud Storage API for simple and multi-threaded
-handling of objects. It provides a set of data manipulation commands including
-copying, reading, writing and hashing stored data.
+``gs-wrap`` wraps Google Cloud Storage API for multi-threaded
+data manipulation including
+copying, reading, writing and hashing.
 
-We primarly needed a library that is quicker than our previous solution
-`gsutilwrap <https://github.com/Parquery/gsutilwrap/>`_
-at copying many objects from many locations to many other locations. For the
-other methods it also had to achieve equivalent results as gsutilwrap.
-``Gsutilwrap``  is simply wrapping the ``gsutil`` command-line interface in
-order to simplify the deployment and backup tasks related to Google Cloud
-Storage.
+Originally, we used our `gsutilwrap <https://github.com/Parquery/gsutilwrap/>`_,
+a thin wrapper around ``gsutil`` command-line interface, to simplify
+the deployment and backup tasks related to Google Cloud Storage.
+However, ``gsutilwrap`` was prohibitely slow at copying many objects from
+many different prefix paths to many other prefix paths.
 
-The `google-cloud-storage
-<https://github.com/googleapis/google-cloud-python/tree/master/storage/>`_
-provided by Google offers sophisticated features and good performance, but the
-usage differentiate from ``gsutil`` general usage and behaviour. ``gs-wrap``
-wraps ``google-cloud-storage`` in its core and it behaves as you would expect
-from ``gsutil``.
+Therefore we developed ``gs-wrap`` to accelerate these operations while keeping
+it equally fast or faster than ``gsutilwrap`` at other operations.
+
+While the `google-cloud-storage
+<https://github.com/googleapis/google-cloud-python/tree/master/storage/>`_ library
+provided by Google offers sophisticated features and good performance, 
+its use cases and behavior differ from ``gsutil``. 
+Since we wanted the simplicity and usage patterns of ``gsutil``, we made ``gs-wrap``
+wrap ``google-cloud-storage`` in its core and set it to behave like ``gsutil``.
 
 Other related projects
 ----------------------
 
-* simple library `cloud-storage-client <https://github.com/Rakanixu/cloud-storage-client/>`_ to connect with S3 storage and Google Cloud storage
+* `cloud-storage-client <https://github.com/Rakanixu/cloud-storage-client/>`_ to connect with S3 storage and Google Cloud storage
 
 Usage
 =====
@@ -61,7 +62,9 @@ in the same project.
 
     client = gswrap.Client()
     # or
-    client = gswrap.Client(project="project-name", bucket_name="my-bucket")
+    client = gswrap.Client(
+        project="project-name", 
+        bucket_name="my-bucket")
 
 List objects in your bucket
 ---------------------------
@@ -95,7 +98,7 @@ gsutil copies data "in the cloud" (i.e., without downloading to and uploading
 from the machine where you run gswrap).
 
 .. note::
-    client.cp() runs by default non-multi-threaded. When multi-threading is
+    client.cp() runs single-threaded by default. When multi-threading is
     activated, the maximum number of workers is the number of processors on the
     machine, multiplied by 5.
 
@@ -163,9 +166,10 @@ Upload objects to Google Cloud Storage
 .. note::
 
     **recursive** causes directories, buckets, and bucket subdirectories to be
-    copied recursively. If you neglect to use this option for an upload, gswrap
+    copied recursively. If you upload from local disk to Google Storage
+    and set recursive to ``False``, gswrap
     will raise an exception and inform you that no URL matched.
-    Same behaviour as gsutil as long as no wildcards are used.
+    This mimicks the behaviour of ``gsutil`` when no wildcards are used.
 
 .. code-block:: python
 
@@ -188,9 +192,10 @@ Download objects from Google Cloud Storage
 .. note::
 
     **recursive** causes directories, buckets, and bucket subdirectories to be
-    copied recursively. If you neglect to use this option for a download, gswrap
+    copied recursively. If you upload from local disk to Google Storage
+    and set recursive to ``False``, gswrap
     will raise an exception and inform you that no URL matched.
-    Same behaviour as gsutil as long as no wildcards are used.
+    This mimicks the behaviour of ``gsutil`` when no wildcards are used.
 
 .. code-block:: python
 
@@ -198,14 +203,18 @@ Download objects from Google Cloud Storage
 
     os.stat("/home/user/storage/file1").st_mtime # 1537947563
 
-    client.cp(src="gs://your-bucket/file1", dst="/home/user/storage/file1",
-    no_clobber=True)
+    client.cp(
+        src="gs://your-bucket/file1", 
+        dst="/home/user/storage/file1",
+        no_clobber=True)
 
     # no_clobber option stops from overwriting
     os.stat("/home/user/storage/file1").st_mtime # 1537947563
 
-    client.cp(src="gs://your-bucket/file1", dst="/home/user/storage/file1",
-    no_clobber=False)
+    client.cp(
+        src="gs://your-bucket/file1", 
+        dst="/home/user/storage/file1",
+        no_clobber=False)
 
     os.stat("/home/user/storage/file1").st_mtime # 1540889799
 
@@ -215,19 +224,22 @@ Perform multiple copy operations in one call
 .. code-block:: python
 
     sources_destinations = [
-                    # copy on google cloud storage
-                    ('gs://your-bucket/your-dir/file',
-                    'gs://your-bucket/backup-dir/file'),
-                    # copy from gcs to local
-                    ('gs://your-bucket/your-dir/file',
-                    pathlib.Path('/home/user/storage/backup-file')),
-                    # copy from local to gcs
-                    (pathlib.Path('/home/user/storage/new-file'),
-                    'gs://your-bucket/your-dir/new-file'),
-                    # copy locally
-                    (pathlib.Path('/home/user/storage/file'),
-                    pathlib.Path('/home/user/storage/new-file'))
-                ]
+        # copy on google cloud storage
+        ('gs://your-bucket/your-dir/file',
+         'gs://your-bucket/backup-dir/file'),
+        
+        # copy from gcs to local
+        ('gs://your-bucket/your-dir/file',
+         pathlib.Path('/home/user/storage/backup-file')),
+        
+        # copy from local to gcs
+        (pathlib.Path('/home/user/storage/new-file'),
+         'gs://your-bucket/your-dir/new-file'),
+        
+        # copy locally
+        (pathlib.Path('/home/user/storage/file'),
+         pathlib.Path('/home/user/storage/new-file'))]
+
     client.cp_many_to_many(srcs_dsts=sources_destinations)
 
 Remove files from google cloud storage
@@ -253,16 +265,20 @@ Read and write files in google cloud storage
 
 .. code-block:: python
 
-    client.write_text(url:"gs://your-bucket/file", text="Hello, I'm text",
+    client.write_text(url="gs://your-bucket/file",
+                      text="Hello, I'm text",
+                      encoding='utf-8')
+
+    client.read_text(url="gs://your-bucket/file", 
                      encoding='utf-8')
-    client.read_text(url:"gs://your-bucket/file", encoding='utf-8')
     # Hello I'm text
 
     client.write_bytes(url="gs://your-bucket/data",
-                        data="I'm important data".encode('utf-8'))
+                       data="I'm important data".encode('utf-8'))
 
     data = client.read_bytes(url="gs://your-bucket/data")
-    print(data.decode('utf-8')) # I'm important data
+    data.decode('utf-8')
+    # I'm important data
 
 Copy os.stat() of a file or metadata of a blob
 ----------------------------------------------
@@ -283,7 +299,7 @@ Copy os.stat() of a file or metadata of a blob
 
     # upload without preserve_posix
     client.cp(src=pathlib.Path('/home/user/storage/file'),
-                dst="gs://your-bucket/file")
+              dst="gs://your-bucket/file")
 
     stats = client.stat(url="gs://your-bucket/file")
     stats.creation_time  # 2018-11-21 13:27:46.255000+00:00
@@ -338,10 +354,10 @@ Documentation
 The documentation is available on `readthedocs
 <https://gs-wrap.readthedocs.io/en/latest/>`_.
 
-Quick Start
-===========
+Setup
+=====
 
-In order to use this library, you first need to go through the following steps:
+In order to use this library, you need to go through the following steps:
 
 1. `Select or create a Cloud Platform project. <https://console.cloud.google.com/project>`_
 2. `Enable billing for your project. <https://console.cloud.google.com/project>`_
@@ -403,8 +419,10 @@ Namely, we use:
 * `isort <https://github.com/timothycrosley/isort>`_ to sort your imports for you.
 * Various linter checks are done with `pylint <https://www.pylint.org/>`_.
 * Doctests are executed using the Python `doctest module <https://docs.python.org/3.5/library/doctest.html>`_.
-* `pyicontract-lint <https://github.com/Parquery/pyicontract-lint/>`_ lints contracts in Python code defined with `icontract library <https://github.com/Parquery/icontract/>`_.
-* `twine <https://pypi.org/project/twine/>`_ checks the README for invalid markup which will prevent it from rendering on PyPI.
+* `pyicontract-lint <https://github.com/Parquery/pyicontract-lint/>`_ lints contracts 
+  in Python code defined with `icontract library <https://github.com/Parquery/icontract/>`_.
+* `twine <https://pypi.org/project/twine/>`_ to check the README for invalid markup 
+  which prevents it from rendering correctly on PyPI.
 
 Run the pre-commit checks locally from an activated virtual environment with
 development dependencies:
@@ -430,7 +448,7 @@ project directory, run the benchmarks with:
 
     ./benchmark/main.py *NAME OF YOUR GCS BUCKET*
 
-Some of our benchmark results:
+Here are some of our benchmark results:
 
 .. code-block:: text
 
