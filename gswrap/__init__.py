@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Wrap gCloud Storage API for simpler and multithreaded handling of objects."""
+"""Wrap Google Cloud Storage API for multi-threaded data manipulation."""
 
 # pylint: disable=protected-access
 # pylint: disable=too-many-lines
@@ -328,27 +328,24 @@ def _download_to_path(blob: google.cloud.storage.blob.Blob,
 class Client:
     """Google Cloud Storage Client for simple usage of gsutil commands."""
 
-    def __init__(self,
-                 bucket_name: Optional[str] = None,
-                 project: Optional[str] = None) -> None:
+    def __init__(self, project: Optional[str] = None) -> None:
         """
         Initialize.
 
-        :param bucket_name: name of the active bucket
         :param project:
-            the project which the client acts on behalf of. Will
-            be passed when creating a topic. If None, falls back to the
-            default inferred from the environment.
+            The Google Cloud Storage project which the client acts on behalf of.
+            It will be passed when creating the internal client. If not passed,
+            falls back to the default inferred from the locally authenticated
+            Google Cloud SDK (http://cloud.google.com/sdk) environment. Each
+            project needs a separate client. Operations between two different
+            projects are not supported.
         """
         if project is not None:
             self._client = google.cloud.storage.Client(project=project)
         else:
             self._client = google.cloud.storage.Client()
 
-        if bucket_name:
-            self._bucket = self._client.get_bucket(bucket_name=bucket_name)
-        else:
-            self._bucket = None
+        self._bucket = None  # type: google.cloud.storage.Bucket
 
     def _change_bucket(self, bucket_name: str) -> None:
         """
@@ -508,7 +505,7 @@ class Client:
             When specified, existing files or objects at the destination will
             not be overwritten.
         :param multithreaded:
-            if set to False the copy will be performed non-multithreaded.
+            if set to False the copy will be performed single-threaded.
             If set to True it will use multiple threads to perform the copy.
         :param preserve_posix:
             (from https://cloud.google.com/storage/docs/gsutil/commands/cp)
@@ -589,10 +586,10 @@ class Client:
         :param recursive: if true also copy files within folders
         :param no_clobber: if true don't overwrite files which already exist
         :param multithreaded:
-            if set to False the copy will be performed non-multithreaded.
+            if set to False the copy will be performed single-threaded.
             If set to True it will use multiple threads to perform the copy.
         """
-        # None is ThreadPoolExecutor max_workers default. 1 is non-multithreaded
+        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
 
         futures = []  # type: List[concurrent.futures.Future]
@@ -666,7 +663,7 @@ class Client:
         :param recursive: if true also upload files within folders
         :param no_clobber: if true don't overwrite files which already exist
         :param multithreaded:
-            if set to False the upload will be performed non-multithreaded.
+            if set to False the upload will be performed single-threaded.
             If set to True it will use multiple threads to perform the upload.
         """
         upload_files = []  # type: List[str]
@@ -694,7 +691,7 @@ class Client:
         self._change_bucket(bucket_name=dst.bucket)
         bucket = self._bucket
 
-        # None is ThreadPoolExecutor max_workers default. 1 is non-multithreaded
+        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
@@ -756,7 +753,7 @@ class Client:
         :param recursive: if True also download files within folders
         :param no_clobber: if True don't overwrite files which already exist
         :param multithreaded:
-            if set to False the download will be performed non-multithreaded.
+            if set to False the download will be performed single-threaded.
             If set to True it will use multiple threads to perform the download.
         """
         src_prefix_parent = pathlib.Path(src.prefix)
@@ -786,7 +783,7 @@ class Client:
         blob_iterator = bucket.list_blobs(
             prefix=src_prefix, delimiter=delimiter)
 
-        # None is ThreadPoolExecutor max_workers default. 1 is non-multithreaded
+        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
@@ -845,7 +842,7 @@ class Client:
             When specified, existing files or objects at the destination will
             not be overwritten.
         :param multithreaded:
-            if set to False the copy will be performed non-multithreaded.
+            if set to False the copy will be performed single-threaded.
             If set to True it will use multiple threads to perform the copy.
         :param preserve_posix:
             (from https://cloud.google.com/storage/docs/gsutil/commands/cp)
@@ -856,7 +853,7 @@ class Client:
             access/modification time of the file. POSIX attributes are always
             preserved when blob is copied on google cloud storage.
         """
-        # None is ThreadPoolExecutor max_workers default. 1 is non-multithreaded
+        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
         futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(
@@ -887,7 +884,7 @@ class Client:
         :param url: google cloud storage URL
         :param recursive: if True remove files within folders
         :param multithreaded:
-            if set to False the remove will be performed non-multithreaded.
+            if set to False the remove will be performed single-threaded.
             If set to True it will use multiple threads to perform the remove.
         """
         rm_url = resource_type(res_loc=url)
@@ -923,7 +920,7 @@ class Client:
                 prefix=gcs_url_prefix, delimiter=delimiter)
 
             # None is ThreadPoolExecutor max_workers default.
-            # 1 is non-multithreaded
+            # 1 is single-threaded
             max_workers = None if multithreaded else 1
             futures = []  # type: List[concurrent.futures.Future]
             with concurrent.futures.ThreadPoolExecutor(
@@ -1008,7 +1005,7 @@ class Client:
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
     def stat(self, url: str) -> Optional[Stat]:
         """
-        Retrieve that stat of the object in the Google Cloud Storage.
+        Retrieve the stat of the object in the Google Cloud Storage.
 
         :param url: to the object
         :return: object status,
@@ -1121,14 +1118,14 @@ class Client:
         :param urls: URLs to stat and retrieve MD5 of
         :param multithreaded:
             if set to False the retrieving hex digests of md5 checksums  will
-            be performed non-multithreaded.
+            be performed single-threaded.
             If set to True it will use multiple threads to perform the this.
         :return: list of hexdigests;
             if an URL does not exist, the corresponding item is None.
         """
         hexdigests = []  # type: List[Optional[str]]
 
-        # None is ThreadPoolExecutor max_workers default. 1 is non-multithreaded
+        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
         stat_futures = []  # type: List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \

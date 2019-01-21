@@ -17,7 +17,8 @@ import tests.common
 
 class TestReadWrite(unittest.TestCase):
     def setUp(self):
-        self.client = gswrap.Client(bucket_name=tests.common.TEST_GCS_BUCKET)
+        self.client = gswrap.Client()
+        self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
 
     def tearDown(self):

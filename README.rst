@@ -67,7 +67,7 @@ created. This one uses internally the `Storage Client
 <https://googleapis.github.io/google-cloud-python/latest/storage/client.html#google.cloud.storage.client.Client/>`_
 from ``google-cloud-storage``.
 
-Two parameters can be passed to the client:
+One parameter can be passed to the client:
 
 The Google Cloud Storage **project** which the client acts on behalf of. It will
 be passed when creating the internal client. If not passed, falls back to the
@@ -75,16 +75,11 @@ default inferred from the locally authenticated `Google Cloud SDK
 <http://cloud.google.com/sdk>`_ environment. Each project needs a separate
 client. Operations between two different projects are not supported.
 
-The Google Cloud Storage **bucket_name** which the client acts on behalf of.
-It can be either passed when creating the client or will be retrieved from the
-first command accessing the project. The library automatically changes the
-bucket when trying to access another bucket in the same project.
-
 .. code-block:: python
 
     import gswrap
 
-    client = gswrap.Client() # project and bucket_name are optional
+    client = gswrap.Client() # project is optional
 
 List objects in your bucket
 ---------------------------
