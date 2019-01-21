@@ -37,12 +37,12 @@ def print_benchmark(
         time_other_libraries: List[Tuple[LibraryChecked, float]]) -> None:
     """Print benchmark table with all libraries that were tested."""
 
-    time_table = prettytable.PrettyTable(hrules=prettytable.ALL,
-                                         header_style="upper")
+    time_table = prettytable.PrettyTable(
+        hrules=prettytable.ALL, header_style="upper")
     time_table.add_column(fieldname="Tested", column=[], align='l')
     time_table.add_column(fieldname="Time", column=[], align='l')
     time_table.add_column(fieldname="SpeedUp", column=[], align='l')
-    time_table.add_row(["gswrap", "{} s".format(round(time_gswrap, 2)), "\-"])
+    time_table.add_row(["gswrap", "{} s".format(round(time_gswrap, 2)), r"\-"])
     for library, time_other in time_other_libraries:
         time_table.add_row([
             "{}".format(library.name), "{} s".format(round(time_other, 2)),
