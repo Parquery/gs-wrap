@@ -20,7 +20,8 @@ import tests.common
 
 class TestCPLocal(unittest.TestCase):
     def setUp(self):
-        self.client = gswrap.Client(bucket_name=tests.common.TEST_GCS_BUCKET)
+        self.client = gswrap.Client()
+        self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.local_dir = pathlib.Path(self.tmp_dir.name) / str(uuid.uuid4())
         self.local_dir.mkdir()

@@ -183,7 +183,7 @@ class Benchmark:
                     file.write_text("text")
                 try:
                     _setup(url=self.url_prefix, path=tmp_dir.path)
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     time_gswrap = timer(
                         client.ls, url=self.url_prefix, recursive=True)
 
@@ -205,7 +205,7 @@ class Benchmark:
                     file = tmp_dir.path / "file{}".format(index)
                     file.write_text("text")
                 try:
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     time_gswrap = timer(
                         _gswrap_cp,
                         src=tmp_dir.path,
@@ -234,7 +234,7 @@ class Benchmark:
                     file = tmp_dir.path / "file{}".format(index)
                     file.write_text("text")
                 try:
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     time_gswrap = 0.0
                     for file in tmp_dir.path.iterdir():
                         time_gswrap += timer(
@@ -268,7 +268,7 @@ class Benchmark:
                     file = tmp_dir.path / "file{}".format(index)
                     file.write_text("a" * size)
                 try:
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     time_gswrap = timer(
                         _gswrap_cp,
                         src=tmp_dir.path,
@@ -297,7 +297,7 @@ class Benchmark:
                     file.parent.mkdir(parents=True, exist_ok=True)
                     file.write_text("text")
                 try:
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     srcs_dsts = _upload_many_to_many_local_ls(
                         src=tmp_dir.path.as_posix(),
                         dst=self.url_prefix + '/gswrap')
@@ -338,7 +338,7 @@ class Benchmark:
 
                     gswrap_dir = tmp_dir.path / "gswrap"
                     gswrap_dir.mkdir()
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     time_gswrap = timer(
                         _gswrap_cp,
                         client=client,
@@ -365,7 +365,7 @@ class Benchmark:
 
                     gswrap_dir = tmp_dir.path / "gswrap"
                     gswrap_dir.mkdir()
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     srcs_dsts = _gswrap_list_for_cp_many_to_many(
                         client=client,
                         src=self.url_prefix,
@@ -411,7 +411,7 @@ class Benchmark:
                         src=self.url_prefix,
                         dst=copy_url + "/gsutil")
 
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     time_gswrap = timer(
                         _gswrap_cp,
                         client=client,
@@ -439,7 +439,7 @@ class Benchmark:
                 try:
                     _setup(url=self.url_prefix, path=tmp_dir.path)
 
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     srcs_dsts = _gswrap_list_for_cp_many_to_many(
                         client=client,
                         src=self.url_prefix,
@@ -483,7 +483,7 @@ class Benchmark:
 
                 _setup(url=self.url_prefix, path=tmp_dir.path)
 
-                client = gswrap.Client(bucket_name=self.bucket)
+                client = gswrap.Client()
                 time_gswrap = timer(
                     client.rm,
                     url=self.url_prefix,
@@ -511,7 +511,7 @@ class Benchmark:
                     for url in urls:
                         time_gsutilwrap += timer(gsutilwrap.read_text, url=url)
 
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     time_gswrap = 0.0
                     urls = client.ls(url=self.url_prefix, recursive=True)
                     for url in urls:
@@ -536,7 +536,7 @@ class Benchmark:
                         text="hello",
                         quiet=True)
 
-                client = gswrap.Client(bucket_name=self.bucket)
+                client = gswrap.Client()
                 time_gswrap = 0.0
                 for index in range(testcase):
                     time_gswrap += timer(
@@ -567,7 +567,7 @@ class Benchmark:
                     for url in urls:
                         time_gsutilwrap += timer(gsutilwrap.stat, url=url)
 
-                    client = gswrap.Client(bucket_name=self.bucket)
+                    client = gswrap.Client()
                     time_gswrap = 0.0
                     urls = client.ls(url=self.url_prefix, recursive=True)
                     for url in urls:

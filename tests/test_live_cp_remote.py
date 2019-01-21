@@ -19,7 +19,8 @@ import tests.common
 
 class TestCPRemote(unittest.TestCase):
     def setUp(self):
-        self.client = gswrap.Client(bucket_name=tests.common.TEST_GCS_BUCKET)
+        self.client = gswrap.Client()
+        self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
         self.tmp_dir = tempfile.TemporaryDirectory()
         tests.common.gcs_test_setup(
