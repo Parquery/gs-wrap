@@ -83,6 +83,9 @@ class TestCPDownload(unittest.TestCase):
                 ["gs://{}/{}/d1/".format(tests.common.TEST_GCS_BUCKET,
                                          self.bucket_prefix),
                  local_dir.as_posix() + '/'],
+                ["gs://{}/{}/d1/f11".format(tests.common.TEST_GCS_BUCKET,
+                                            self.bucket_prefix)
+                    , local_dir.as_posix()],
             ]
             # yapf: enable
             gsutil_ls_set = set()
@@ -176,6 +179,9 @@ class TestCPDownload(unittest.TestCase):
                 ["gs://{}/{}/d1/f11".format(tests.common.TEST_GCS_BUCKET,
                                             self.bucket_prefix)
                     , local_file.as_posix()],
+                ["gs://{}/{}/d1/f11".format(tests.common.TEST_GCS_BUCKET,
+                                            self.bucket_prefix)
+                    , local_dir.as_posix()],
             ]
             # yapf: enable
 
