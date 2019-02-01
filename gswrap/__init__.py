@@ -431,7 +431,7 @@ class Client:
     @icontract.require(lambda url: url.startswith('gs://'))
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
     def long_ls(self, url: str,
-                recursive: bool = False) -> List[Tuple[str, Stat]]:
+                recursive: bool = False) -> List[Tuple[str, Optional[Stat]]]:
         """
         List URLs with their stats given the url.
 
