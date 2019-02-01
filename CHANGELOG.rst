@@ -1,6 +1,7 @@
 1.0.2
 =====
 * Fixed downloading a file into a directory bug and added testcase
+* Fixed long_ls return type
 
 1.0.1
 =====
