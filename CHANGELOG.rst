@@ -1,3 +1,7 @@
+1.0.2
+=====
+* Fixed downloading a file into a directory bug and added testcase
+
 1.0.1
 =====
 * Rephrase PyPi description in meta information about gs-wrap package

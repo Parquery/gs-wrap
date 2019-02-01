@@ -795,7 +795,7 @@ class Client:
                     file_name = file_name[1:]
 
                 # check if file_name has no subdirectory
-                if file_name.find('/') == -1:
+                if file_name.find('/') == -1 and not dst_path.is_dir():
                     file_path = dst_path
                 else:
                     file_path = dst_path / file_name
