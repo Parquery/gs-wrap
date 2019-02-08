@@ -28,20 +28,22 @@ def main() -> int:
 
     print("YAPF'ing...")
     if overwrite:
+        # yapf: disable
         subprocess.check_call([
-            "yapf", "--in-place", "--style=style.yapf", "--recursive", "tests",
-            "gswrap", "benchmark", "setup.py", "precommit.py"
-        ],
-                              cwd=repo_root.as_posix())
+            "yapf", "--in-place", "--style=style.yapf", "--recursive",
+            "tests", "gswrap", "benchmark", "setup.py", "precommit.py"],
+            cwd=repo_root.as_posix())
+        # yapf: enable
     else:
+        # yapf: disable
         subprocess.check_call([
-            "yapf", "--diff", "--style=style.yapf", "--recursive", "tests",
-            "gswrap", "benchmark", "setup.py", "precommit.py"
-        ],
-                              cwd=repo_root.as_posix())
+            "yapf", "--diff", "--style=style.yapf", "--recursive",
+            "tests", "gswrap", "benchmark", "setup.py", "precommit.py"],
+            cwd=repo_root.as_posix())
+        # yapf: enable
 
     print("Mypy'ing...")
-    subprocess.check_call(["mypy", "gswrap", "tests", "benchmark"],
+    subprocess.check_call(["mypy", "--strict", "gswrap", "tests", "benchmark"],
                           cwd=repo_root.as_posix())
 
     print("Isort'ing...")

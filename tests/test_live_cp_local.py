@@ -19,17 +19,17 @@ import tests.common
 
 
 class TestCPLocal(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.local_dir = pathlib.Path(self.tmp_dir.name) / str(uuid.uuid4())
         self.local_dir.mkdir()
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.tmp_dir.cleanup()
 
-    def test_gsutil_vs_gswrap_local_cp_file(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_local_cp_file(self) -> None:  # pylint: disable=invalid-name
         local_file = self.local_dir / 'local-file'
         local_file.write_text('hello')
 
@@ -42,7 +42,7 @@ class TestCPLocal(unittest.TestCase):
 
             self.assertEqual("hello", dst.read_text())
 
-    def test_gsutil_vs_gswrap_local_cp_dir(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_local_cp_dir(self) -> None:  # pylint: disable=invalid-name
         src_dir = self.local_dir / "src"
         src_dir.mkdir()
         local_file = src_dir / 'local-file'
@@ -65,7 +65,7 @@ class TestCPLocal(unittest.TestCase):
                 pathlib.Path(gsutil_file).relative_to(dst_gsutil),
                 pathlib.Path(gswrap_file).relative_to(dst_gswrap))
 
-    def test_gsutil_vs_gswrap_local_cp_check_raises(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_local_cp_check_raises(self) -> None:  # pylint: disable=invalid-name
         local_path = pathlib.Path(self.tmp_dir.name)
         local_file = local_path / 'local-file'
         local_file.write_text('hello')
@@ -90,7 +90,7 @@ class TestCPLocal(unittest.TestCase):
             dst=test_case[1],
             recursive=test_case[2])
 
-    def test_cp_local_no_clobber(self):
+    def test_cp_local_no_clobber(self) -> None:
         with temppathlib.NamedTemporaryFile() as tmp_file1, \
                 temppathlib.NamedTemporaryFile() as tmp_file2:
             tmp_file1.path.write_text("hello")
@@ -103,7 +103,7 @@ class TestCPLocal(unittest.TestCase):
 
             self.assertEqual("hello there", tmp_file2.path.read_text())
 
-    def test_cp_local_clobber(self):
+    def test_cp_local_clobber(self) -> None:
         with temppathlib.NamedTemporaryFile() as tmp_file1, \
                 temppathlib.NamedTemporaryFile() as tmp_file2:
             tmp_file1.path.write_text("hello")

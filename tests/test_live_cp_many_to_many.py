@@ -19,7 +19,7 @@ import tests.common
 
 
 class TestCPManyToMany(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
@@ -27,11 +27,11 @@ class TestCPManyToMany(unittest.TestCase):
         tests.common.gcs_test_setup(
             tmp_dir_name=self.tmp_dir.name, prefix=self.bucket_prefix)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         tests.common.gcs_test_teardown(prefix=self.bucket_prefix)
         self.tmp_dir.cleanup()
 
-    def test_cp_remote_many_to_many(self):
+    def test_cp_remote_many_to_many(self) -> None:
         gcs_bucket = 'gs://{}'.format(tests.common.TEST_GCS_BUCKET)
         prefix = self.bucket_prefix
         # yapf: disable
@@ -44,7 +44,7 @@ class TestCPManyToMany(unittest.TestCase):
                 '{}/{}/d1/f11'.format(gcs_bucket, prefix),
                 '{}/{}/d1-m2many/files/f11'.format(gcs_bucket, prefix)
             )
-        ]  # type:Sequence[Tuple[str, pathlib.Path]]
+        ]  # type: Sequence[Tuple[str, str]]
         # yapf: enable
 
         self.client.cp_many_to_many(srcs_dsts=test_cases, recursive=True)
@@ -54,7 +54,7 @@ class TestCPManyToMany(unittest.TestCase):
             path='{}/{}/d1-m2many'.format(gcs_bucket, prefix), recursive=True)))
         # yapf: enable
 
-    def test_cp_download_many_to_many(self):
+    def test_cp_download_many_to_many(self) -> None:
         gcs_bucket = 'gs://{}'.format(tests.common.TEST_GCS_BUCKET)
         prefix = self.bucket_prefix
         tmp_dir = self.tmp_dir.name
@@ -76,7 +76,7 @@ class TestCPManyToMany(unittest.TestCase):
             path='{}/{}/d1-m2many'.format(self.tmp_dir.name, prefix))))
         # yapf: enable
 
-    def test_cp_download_many_to_many_with_creating_local_dir(self):
+    def test_cp_download_many_to_many_with_creating_local_dir(self) -> None:
         gcs_bucket = 'gs://{}'.format(tests.common.TEST_GCS_BUCKET)
         with temppathlib.TemporaryDirectory() as tmp_dir:
             for index in range(10):
@@ -104,10 +104,8 @@ class TestCPManyToMany(unittest.TestCase):
 
             self.assertEqual(10, len(result))
 
-            expected = []
-            [
-                expected.append(
-                    (tmp_dir.path / "cp-m2m/{}/file".format(index)).as_posix())
+            expected = [
+                (tmp_dir.path / "cp-m2m/{}/file".format(index)).as_posix()
                 for index in range(10)
             ]
 

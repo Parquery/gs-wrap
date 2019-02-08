@@ -214,23 +214,23 @@ class Stat:
     """
 
     # pylint: disable=too-many-instance-attributes
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize."""
-        self.creation_time = None
-        self.update_time = None
-        self.storage_class = None
-        self.content_length = None
-        self.file_mtime = None
-        self.file_atime = None
-        self.posix_uid = None
-        self.posix_gid = None
-        self.posix_mode = None
-        self.crc32c = None
-        self.md5 = None
+        self.creation_time = None  # type: Optional[Optional[datetime.datetime]]
+        self.update_time = None  # type: Optional[Optional[datetime.datetime]]
+        self.storage_class = None  # type: Optional[str]
+        self.content_length = None  # type: Optional[int]
+        self.file_mtime = None  # type: Optional[Optional[datetime.datetime]]
+        self.file_atime = None  # type: Optional[Optional[datetime.datetime]]
+        self.posix_uid = None  # type: Optional[str]
+        self.posix_gid = None  # type: Optional[str]
+        self.posix_mode = None  # type: Optional[str]
+        self.crc32c = None  # type: Optional[bytes]
+        self.md5 = None  # type: Optional[bytes]
 
 
 def _os_stat_to_blob_metadata(path: Union[str, pathlib.Path],
-                              blob: google.cloud.storage.blob.Blob):
+                              blob: google.cloud.storage.blob.Blob) -> None:
     """
     Store os.stat() information from local file in google cloud blob's metadata.
 
@@ -256,7 +256,7 @@ def _os_stat_to_blob_metadata(path: Union[str, pathlib.Path],
 
 
 def _blob_metadata_to_os_stat(path: Union[str, pathlib.Path],
-                              blob: google.cloud.storage.blob.Blob):
+                              blob: google.cloud.storage.blob.Blob) -> None:
     """
     Store google cloud blob's metadata to os.stat() information of a local file.
 
@@ -284,7 +284,7 @@ def _blob_metadata_to_os_stat(path: Union[str, pathlib.Path],
 
 def _upload_from_path(blob: google.cloud.storage.blob.Blob,
                       path: Union[str, pathlib.Path],
-                      preserve_posix: bool = False):
+                      preserve_posix: bool = False) -> None:
     """
     Upload from path with the option to preserve POSIX attributes.
 
@@ -303,7 +303,7 @@ def _upload_from_path(blob: google.cloud.storage.blob.Blob,
 
 def _download_to_path(blob: google.cloud.storage.blob.Blob,
                       path: Union[str, pathlib.Path],
-                      preserve_posix: bool = False):
+                      preserve_posix: bool = False) -> None:
     """
     Download to path with the option to preserve POSIX attributes.
 
@@ -388,11 +388,7 @@ class Client:
 
         blobs = self._ls(url=ls_url, recursive=recursive)
 
-        blob_list = []
-        for element in blobs:
-            blob_list.append('gs://' + ls_url.bucket + '/' + element)
-
-        return blob_list
+        return ['gs://{}/{}'.format(ls_url.bucket, blob) for blob in blobs]
 
     def _ls(self, url: _GCSURL, recursive: bool = False) -> List[str]:
         """
@@ -443,11 +439,7 @@ class Client:
         """
         entries = self.ls(url=url, recursive=recursive)
 
-        tuples = []
-        for entry in entries:
-            tuples.append((entry, self.stat(url=entry)))
-
-        return tuples
+        return [(entry, self.stat(url=entry)) for entry in entries]
 
     @icontract.require(lambda src: not contains_wildcard(prefix=str(src)))
     @icontract.require(lambda dst: not contains_wildcard(prefix=str(dst)))
@@ -592,7 +584,7 @@ class Client:
         # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
 
-        futures = []  # type: List[concurrent.futures.Future]
+        futures = []  # List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
 
@@ -693,7 +685,7 @@ class Client:
 
         # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
-        futures = []  # type: List[concurrent.futures.Future]
+        futures = []  # List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
             for file_name in upload_files:
@@ -785,7 +777,7 @@ class Client:
 
         # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
-        futures = []  # type: List[concurrent.futures.Future]
+        futures = []  # List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
             for blob in blob_iterator:
@@ -821,7 +813,7 @@ class Client:
             recursive: bool = False,
             no_clobber: bool = False,
             multithreaded: bool = False,
-            preserve_posix: bool = False):
+            preserve_posix: bool = False) -> None:
         """
         Perform multiple copy operations in a single function call.
 
@@ -855,7 +847,7 @@ class Client:
         """
         # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
-        futures = []  # type: List[concurrent.futures.Future]
+        futures = []  # List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=max_workers) as executor:
             for src, dst in srcs_dsts:
@@ -922,7 +914,7 @@ class Client:
             # None is ThreadPoolExecutor max_workers default.
             # 1 is single-threaded
             max_workers = None if multithreaded else 1
-            futures = []  # type: List[concurrent.futures.Future]
+            futures = []  # List[concurrent.futures.Future]
             with concurrent.futures.ThreadPoolExecutor(
                     max_workers=max_workers) as executor:
                 for blob_to_delete in blob_iterator:
@@ -953,7 +945,8 @@ class Client:
         if blob is None:
             raise google.api_core.exceptions.NotFound('No URLs matched')
 
-        return blob.download_as_string()
+        read_bytes = blob.download_as_string()  # type: bytes
+        return read_bytes
 
     @icontract.require(lambda url: url.startswith('gs://'))
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
@@ -971,7 +964,7 @@ class Client:
 
     @icontract.require(lambda url: url.startswith('gs://'))
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
-    def write_bytes(self, url: str, data: bytes):
+    def write_bytes(self, url: str, data: bytes) -> None:
         """
         Write bytes to the storage at the given URL.
 
@@ -990,7 +983,7 @@ class Client:
 
     @icontract.require(lambda url: url.startswith('gs://'))
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
-    def write_text(self, url: str, text: str, encoding: str = 'utf-8'):
+    def write_text(self, url: str, text: str, encoding: str = 'utf-8') -> None:
         """
         Write bytes to the storage at the given URL.
 
@@ -1127,7 +1120,7 @@ class Client:
 
         # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
-        stat_futures = []  # type: List[concurrent.futures.Future]
+        stat_futures = []  # List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
             for url in urls:
@@ -1135,9 +1128,12 @@ class Client:
 
             for stat_future in stat_futures:
                 stat = stat_future.result()
-                hexdigests.append(
-                    base64.b64decode(stat.md5).
-                    hex() if stat is not None else None)
+
+                if stat is None:
+                    hexdigests.append(None)
+                else:
+                    assert isinstance(stat.md5, bytes)
+                    hexdigests.append(base64.b64decode(stat.md5).hex())
 
         for future in stat_futures:
             future.result()
