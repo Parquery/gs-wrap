@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import unittest
 import uuid
+from typing import Set
 
 import temppathlib
 
@@ -19,7 +20,7 @@ import tests.common
 
 
 class TestCPUpload(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
@@ -27,11 +28,11 @@ class TestCPUpload(unittest.TestCase):
         tests.common.gcs_test_setup(
             tmp_dir_name=self.tmp_dir.name, prefix=self.bucket_prefix)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         tests.common.gcs_test_teardown(prefix=self.bucket_prefix)
         self.tmp_dir.cleanup()
 
-    def test_gsutil_vs_gswrap_upload_recursive(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_upload_recursive(self) -> None:  # pylint: disable=invalid-name
         # pylint: disable=too-many-locals
         with temppathlib.TemporaryDirectory() as tmp_dir:
             local_path = tmp_dir.path / 'tmp'
@@ -64,8 +65,8 @@ class TestCPUpload(unittest.TestCase):
                         tests.common.TEST_GCS_BUCKET, self.bucket_prefix)],
             ]
             # yapf: enable
-            gsutil_ls_set = set()
-            gcs_ls_set = set()
+            gsutil_ls_set = set()  # type: Set[str]
+            gcs_ls_set = set()  # type: Set[str]
 
             ls_path = "gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                            self.bucket_prefix)
@@ -74,7 +75,7 @@ class TestCPUpload(unittest.TestCase):
                 self.client.cp(
                     src=test_case[0], dst=test_case[1], recursive=True)
                 gcs_paths = self.client.ls(url=ls_path, recursive=True)
-                [gcs_ls_set.add(path) for path in gcs_paths]
+                gcs_ls_set.union([path for path in gcs_paths])
                 tests.common.call_gsutil_rm(
                     path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                               self.bucket_prefix),
@@ -85,7 +86,7 @@ class TestCPUpload(unittest.TestCase):
                 tests.common.call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=True)
                 gsutil_paths = self.client.ls(url=ls_path, recursive=True)
-                [gsutil_ls_set.add(path) for path in gsutil_paths]
+                gsutil_ls_set.union([path for path in gsutil_paths])
                 tests.common.call_gsutil_rm(
                     path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                               self.bucket_prefix),
@@ -97,7 +98,7 @@ class TestCPUpload(unittest.TestCase):
 
             self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
 
-    def test_gsutil_vs_gswrap_upload_non_recursive(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_upload_non_recursive(self) -> None:  # pylint: disable=invalid-name
         # pylint: disable=too-many-locals
         with temppathlib.TemporaryDirectory() as tmp_dir:
             local_path = tmp_dir.path / 'tmp'
@@ -122,8 +123,8 @@ class TestCPUpload(unittest.TestCase):
                         tests.common.TEST_GCS_BUCKET, self.bucket_prefix)],
             ]
             # yapf: enable
-            gsutil_ls_set = set()
-            gcs_ls_set = set()
+            gsutil_ls_set = set()  # type: Set[str]
+            gcs_ls_set = set()  # type: Set[str]
 
             ls_path = "gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                            self.bucket_prefix)
@@ -132,7 +133,7 @@ class TestCPUpload(unittest.TestCase):
                 self.client.cp(
                     src=test_case[0], dst=test_case[1], recursive=False)
                 gcs_paths = self.client.ls(url=ls_path, recursive=True)
-                [gcs_ls_set.add(path) for path in gcs_paths]
+                gcs_ls_set.union([path for path in gcs_paths])
                 tests.common.call_gsutil_rm(
                     path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                               self.bucket_prefix),
@@ -142,7 +143,7 @@ class TestCPUpload(unittest.TestCase):
                 tests.common.call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=False)
                 gsutil_paths = self.client.ls(url=ls_path, recursive=True)
-                [gsutil_ls_set.add(path) for path in gsutil_paths]
+                gsutil_ls_set.union([path for path in gsutil_paths])
                 tests.common.call_gsutil_rm(
                     path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                               self.bucket_prefix),
@@ -154,7 +155,7 @@ class TestCPUpload(unittest.TestCase):
 
             self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
 
-    def test_gsutil_vs_gswrap_upload_non_recursive_check_raises(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_upload_non_recursive_check_raises(self) -> None:  # pylint: disable=invalid-name
         # pylint: disable=too-many-locals
         with temppathlib.TemporaryDirectory() as tmp_dir:
             local_path = tmp_dir.path / 'tmp'
@@ -191,7 +192,7 @@ class TestCPUpload(unittest.TestCase):
                     dst=test_case[1],
                     recursive=False)
 
-    def test_upload_no_clobber(self):
+    def test_upload_no_clobber(self) -> None:
 
         with temppathlib.TemporaryDirectory() as local_tmpdir:
             tmp_path = local_tmpdir.path / str(uuid.uuid4())
@@ -212,7 +213,7 @@ class TestCPUpload(unittest.TestCase):
 
             self.assertEqual(timestamp_f11, blob_f11_not_updated.updated)
 
-    def test_upload_clobber(self):
+    def test_upload_clobber(self) -> None:
 
         with temppathlib.TemporaryDirectory() as local_tmpdir:
             tmp_path = local_tmpdir.path / str(uuid.uuid4())
@@ -235,15 +236,15 @@ class TestCPUpload(unittest.TestCase):
 
 
 class TestCPUploadNoCommonSetup(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         pass
 
-    def test_upload_two_files(self):
+    def test_upload_two_files(self) -> None:
 
         with temppathlib.TemporaryDirectory() as local_tmpdir:
             tmp_folder = local_tmpdir.path / 'some-folder'
@@ -275,7 +276,7 @@ class TestCPUploadNoCommonSetup(unittest.TestCase):
             content.delete()
             content_other_file.delete()
 
-    def test_upload_preserved_posix(self):
+    def test_upload_preserved_posix(self) -> None:
         with temppathlib.NamedTemporaryFile() as file:
             file.path.write_text(tests.common.TEST_GCS_BUCKET)
 
@@ -292,13 +293,17 @@ class TestCPUploadNoCommonSetup(unittest.TestCase):
                 file_stat = file.path.stat()
                 self.assertIsNotNone(file_stat)
 
+                assert isinstance(gcs_stat, gswrap.Stat)
                 self.assertEqual(file_stat.st_size, gcs_stat.content_length)
 
+                assert isinstance(gcs_stat.file_mtime, datetime.datetime)
                 self.assertEqual(
                     datetime.datetime.utcfromtimestamp(
                         file_stat.st_mtime).replace(microsecond=0).timestamp(),
                     gcs_stat.file_mtime.timestamp())
 
+                assert isinstance(gcs_stat.posix_uid, str)
+                assert isinstance(gcs_stat.posix_gid, str)
                 self.assertEqual(file_stat.st_uid, int(gcs_stat.posix_uid))
                 self.assertEqual(file_stat.st_gid, int(gcs_stat.posix_gid))
                 self.assertEqual(

@@ -19,7 +19,7 @@ import tests.common
 
 
 class TestCreateRemove(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
@@ -27,11 +27,11 @@ class TestCreateRemove(unittest.TestCase):
         tests.common.gcs_test_setup(
             tmp_dir_name=self.tmp_dir.name, prefix=self.bucket_prefix)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         tests.common.gcs_test_teardown(prefix=self.bucket_prefix)
         self.tmp_dir.cleanup()
 
-    def test_remove_blob(self):
+    def test_remove_blob(self) -> None:
         with temppathlib.TemporaryDirectory() as local_tmpdir:
             tmp_folder = local_tmpdir.path / str(uuid.uuid4())
             tmp_folder.mkdir()
@@ -69,7 +69,7 @@ class TestCreateRemove(unittest.TestCase):
                                             self.bucket_prefix, parent),
                 recursive=True)
 
-    def test_gsutil_vs_gswrap_remove_recursive(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_remove_recursive(self) -> None:  # pylint: disable=invalid-name
         # yapf: disable
         test_cases = [
             "gs://{}/{}/d1/d11/f111".format(tests.common.TEST_GCS_BUCKET,
@@ -100,7 +100,7 @@ class TestCreateRemove(unittest.TestCase):
 
             self.assertListEqual(sorted(list_gsutil), sorted(list_gcs))
 
-    def test_gsutil_vs_gswrap_remove_recursive_check_raises(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_remove_recursive_check_raises(self) -> None:  # pylint: disable=invalid-name
         # yapf: disable
         test_cases = [
             "gs://{}/{}/d".format(tests.common.TEST_GCS_BUCKET,
@@ -124,7 +124,7 @@ class TestCreateRemove(unittest.TestCase):
                 path=test_case,
                 recursive=True)
 
-    def test_remove_non_recursive(self):  # pylint: disable=invalid-name
+    def test_remove_non_recursive(self) -> None:  # pylint: disable=invalid-name
         # yapf: disable
         test_case = "gs://{}/{}/d3/d31/d312/f3131".format(
             tests.common.TEST_GCS_BUCKET, self.bucket_prefix)
@@ -141,7 +141,7 @@ class TestCreateRemove(unittest.TestCase):
                                                   self.bucket_prefix)
         ], list_gcs)
 
-    def test_gsutil_vs_gswrap_remove_non_recursive_check_raises(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_remove_non_recursive_check_raises(self) -> None:  # pylint: disable=invalid-name
         # yapf: disable
         test_cases = [
             "gs://{}/{}/d1/d11".format(tests.common.TEST_GCS_BUCKET,

@@ -62,6 +62,7 @@ setup(
         ]
     },
     py_modules=['gswrap', 'gswrap_meta'],
-    include_package_data=True,
-    package_data={"gswrap": ["py.typed"]},
-    data_files=[('.', ['LICENSE', 'README.rst'])])
+    package_data={
+        "gswrap": ["py.typed"],
+        '.': ['LICENSE', 'README.rst']
+    })

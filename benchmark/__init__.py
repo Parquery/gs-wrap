@@ -24,7 +24,7 @@ class LibraryChecked(enum.Enum):
     gsutilwrap = 1
 
 
-def timer(func: Callable[..., Any], *args, **kwargs) -> float:
+def timer(func: Callable[..., Any], *args: Any, **kwargs: Any) -> float:
     """Return time a method needs."""
     start = time.time()
     func(*args, **kwargs)

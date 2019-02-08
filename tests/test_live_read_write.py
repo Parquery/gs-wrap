@@ -16,15 +16,15 @@ import tests.common
 
 
 class TestReadWrite(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         pass
 
-    def test_read_bytes(self):
+    def test_read_bytes(self) -> None:
         with temppathlib.NamedTemporaryFile() as file:
             file.path.write_bytes(tests.common.GCS_FILE_CONTENT.encode('utf-8'))
 
@@ -43,7 +43,7 @@ class TestReadWrite(unittest.TestCase):
                 tests.common.call_gsutil_rm(path="gs://{}/{}/file".format(
                     tests.common.TEST_GCS_BUCKET, self.bucket_prefix))
 
-    def test_read_text(self):
+    def test_read_text(self) -> None:
         with temppathlib.NamedTemporaryFile() as file:
             file.path.write_text(
                 tests.common.GCS_FILE_CONTENT, encoding='iso-8859-1')
@@ -64,7 +64,7 @@ class TestReadWrite(unittest.TestCase):
                 tests.common.call_gsutil_rm(path="gs://{}/{}/file".format(
                     tests.common.TEST_GCS_BUCKET, self.bucket_prefix))
 
-    def test_write_bytes(self):
+    def test_write_bytes(self) -> None:
         try:
             self.client.write_bytes(
                 url="gs://{}/{}/file".format(tests.common.TEST_GCS_BUCKET,
@@ -86,7 +86,7 @@ class TestReadWrite(unittest.TestCase):
                                               self.bucket_prefix),
                 recursive=False)
 
-    def test_write_text(self):
+    def test_write_text(self) -> None:
         try:
             self.client.write_text(
                 url="gs://{}/{}/utf-file".format(tests.common.TEST_GCS_BUCKET,
