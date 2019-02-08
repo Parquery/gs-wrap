@@ -1,3 +1,9 @@
+1.0.3
+=====
+* Added mypy --strict flag in precommit.py and fixed corresponding errors
+* Fixed mkdir racing condition when downloading
+* Updated docstrings with examples
+
 1.0.2
 =====
 * Fixed downloading a file into a directory bug and added testcase
