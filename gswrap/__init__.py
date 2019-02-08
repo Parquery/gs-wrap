@@ -431,7 +431,7 @@ class Client:
         | # ('gs://your-bucket/your-dir/your-subdir1/', None)
         | # ('gs://your-bucket/your-dir/your-subdir2/' None)
         | # ('gs://your-bucket/your-dir/file1,
-        <gswrap.Stat object at 0x7fea01c4a550>)
+        |    <gswrap.Stat object at 0x7fea01c4a550>)
 
         :param url: Google Cloud Storage URL
         :param recursive:
