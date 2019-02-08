@@ -302,7 +302,7 @@ def _upload_from_path(blob: google.cloud.storage.blob.Blob,
 
 
 def _download_to_path(blob: google.cloud.storage.blob.Blob,
-                      path: Union[str, pathlib.Path],
+                      path: str,
                       preserve_posix: bool = False) -> None:
     """
     Download to path with the option to preserve POSIX attributes.
@@ -313,16 +313,10 @@ def _download_to_path(blob: google.cloud.storage.blob.Blob,
         if true then copy blob metadata to file stats, else os.stat will differ
     :return:
     """
-    local_pth = path if isinstance(path, pathlib.Path) else pathlib.Path(path)
-
-    parent = pathlib.Path(local_pth.parent)
-    # exist_ok because another thread might be faster creating the directory
-    parent.mkdir(parents=True, exist_ok=True)
-
-    blob.download_to_filename(filename=local_pth.as_posix())
+    blob.download_to_filename(filename=path)
 
     if preserve_posix:
-        _blob_metadata_to_os_stat(path=local_pth.as_posix(), blob=blob)
+        _blob_metadata_to_os_stat(path=path, blob=blob)
 
 
 class Client:
@@ -795,6 +789,9 @@ class Client:
                 # skip already existing file to not overwrite it
                 if no_clobber and file_path.exists():
                     continue
+
+                file_path_parent = pathlib.Path(file_path.parent)
+                file_path_parent.mkdir(parents=True, exist_ok=True)
 
                 download_thread = executor.submit(
                     _download_to_path,
