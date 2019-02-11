@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import unittest
 import uuid
+from typing import Set
 
 import google.api_core.exceptions
 
@@ -18,7 +19,7 @@ import tests.common
 
 
 class TestCPRemote(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
@@ -26,11 +27,11 @@ class TestCPRemote(unittest.TestCase):
         tests.common.gcs_test_setup(
             tmp_dir_name=self.tmp_dir.name, prefix=self.bucket_prefix)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         tests.common.gcs_test_teardown(prefix=self.bucket_prefix)
         self.tmp_dir.cleanup()
 
-    def test_copy_file_to_file_in_same_bucket(self):
+    def test_copy_file_to_file_in_same_bucket(self) -> None:
         src = 'gs://{}/{}/d1/f11'.format(tests.common.TEST_GCS_BUCKET,
                                          self.bucket_prefix)
         dst = 'gs://{}/{}/ftest'.format(tests.common.TEST_GCS_BUCKET,
@@ -48,7 +49,7 @@ class TestCPRemote(unittest.TestCase):
 
         self.assertEqual(src_text, dst_text)
 
-    def test_copy_folder_in_same_bucket(self):
+    def test_copy_folder_in_same_bucket(self) -> None:
         src = 'gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET,
                                       self.bucket_prefix)
         dst = 'gs://{}/{}/dtest1/'.format(tests.common.TEST_GCS_BUCKET,
@@ -63,7 +64,7 @@ class TestCPRemote(unittest.TestCase):
             src_file = src_file.replace(src, dst + 'd1/')
             self.assertEqual(src_file, dst_file)
 
-    def test_copy_files_in_same_bucket(self):
+    def test_copy_files_in_same_bucket(self) -> None:
         src = 'gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET,
                                       self.bucket_prefix)
         dst = 'gs://{}/{}/dtest1'.format(tests.common.TEST_GCS_BUCKET,
@@ -78,7 +79,7 @@ class TestCPRemote(unittest.TestCase):
             src_file = src_file.replace(src, dst + '/')
             self.assertEqual(src_file, dst_file)
 
-    def test_gsutil_vs_gswrap_copy_recursive(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_copy_recursive(self) -> None:  # pylint: disable=invalid-name
         # yapf: disable
         test_cases = [
             ["gs://{}/{}/d1".format(tests.common.TEST_GCS_BUCKET,
@@ -116,8 +117,8 @@ class TestCPRemote(unittest.TestCase):
         ]
         # yapf: enable
 
-        gsutil_ls_set = set()
-        gcs_ls_set = set()
+        gsutil_ls_set = set()  # type: Set[str]
+        gcs_ls_set = set()  # type: Set[str]
 
         ls_path = "gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                        self.bucket_prefix)
@@ -125,7 +126,7 @@ class TestCPRemote(unittest.TestCase):
         for test_case in test_cases:
             self.client.cp(src=test_case[0], dst=test_case[1], recursive=True)
             gcs_paths = self.client.ls(url=ls_path, recursive=True)
-            [gcs_ls_set.add(path) for path in gcs_paths]
+            gcs_ls_set.union(gcs_paths)
             tests.common.call_gsutil_rm(
                 path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                           self.bucket_prefix),
@@ -136,7 +137,7 @@ class TestCPRemote(unittest.TestCase):
             tests.common.call_gsutil_cp(
                 src=test_case[0], dst=test_case[1], recursive=True)
             gsutil_paths = self.client.ls(url=ls_path, recursive=True)
-            [gsutil_ls_set.add(path) for path in gsutil_paths]
+            gsutil_ls_set.union(gsutil_paths)
             tests.common.call_gsutil_rm(
                 path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                           self.bucket_prefix),
@@ -148,7 +149,7 @@ class TestCPRemote(unittest.TestCase):
 
         self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
 
-    def test_gsutil_vs_gswrap_copy_non_recursive(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_copy_non_recursive(self) -> None:  # pylint: disable=invalid-name
         # yapf: disable
         test_cases = [
             ["gs://{}/{}/d3/d31/d311/f3111".format(tests.common.TEST_GCS_BUCKET,
@@ -170,8 +171,8 @@ class TestCPRemote(unittest.TestCase):
         ]
         # yapf: enable
 
-        gsutil_ls_set = set()
-        gcs_ls_set = set()
+        gsutil_ls_set = set()  # type: Set[str]
+        gcs_ls_set = set()  # type: Set[str]
 
         ls_path = "gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                        self.bucket_prefix)
@@ -179,7 +180,7 @@ class TestCPRemote(unittest.TestCase):
         for test_case in test_cases:
             self.client.cp(src=test_case[0], dst=test_case[1], recursive=False)
             gcs_paths = self.client.ls(url=ls_path, recursive=True)
-            [gcs_ls_set.add(path) for path in gcs_paths]
+            gcs_ls_set.union(gcs_paths)
             tests.common.call_gsutil_rm(
                 path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                           self.bucket_prefix),
@@ -190,7 +191,7 @@ class TestCPRemote(unittest.TestCase):
             tests.common.call_gsutil_cp(
                 src=test_case[0], dst=test_case[1], recursive=False)
             gsutil_paths = self.client.ls(url=ls_path, recursive=True)
-            [gsutil_ls_set.add(path) for path in gsutil_paths]
+            gsutil_ls_set.union(gsutil_paths)
             tests.common.call_gsutil_rm(
                 path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                           self.bucket_prefix),
@@ -202,7 +203,7 @@ class TestCPRemote(unittest.TestCase):
 
         self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
 
-    def test_gsutil_vs_gswrap_copy_non_recursive_check_raises(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_copy_non_recursive_check_raises(self) -> None:  # pylint: disable=invalid-name
         # yapf: disable
         test_cases = [
             ["gs://{}/{}/d1".format(tests.common.TEST_GCS_BUCKET,
@@ -239,7 +240,7 @@ class TestCPRemote(unittest.TestCase):
                 dst=test_case[1],
                 recursive=False)
 
-    def test_cp_no_clobber(self):
+    def test_cp_no_clobber(self) -> None:
         # yapf: disable
         test_case = [
             "gs://{}/{}/d1/d11/f111".format(tests.common.TEST_GCS_BUCKET,
@@ -252,6 +253,8 @@ class TestCPRemote(unittest.TestCase):
 
         path_f111 = gswrap.resource_type(res_loc=test_case[0])
         path_ff = gswrap.resource_type(res_loc=test_case[1])
+        assert isinstance(path_f111, gswrap._GCSURL)
+        assert isinstance(path_ff, gswrap._GCSURL)
         blob_f11 = self.client._bucket.get_blob(path_f111.prefix)
         blob_ff = self.client._bucket.get_blob(path_ff.prefix)
 
@@ -269,7 +272,7 @@ class TestCPRemote(unittest.TestCase):
         self.assertEqual(timestamp_f11, timestamp_f11_not_updated)
         self.assertEqual(timestamp_ff, timestamp_ff_not_updated)
 
-    def test_cp_clobber(self):
+    def test_cp_clobber(self) -> None:
         # yapf: disable
         test_case = [
             "gs://{}/{}/d1/d11/f111".format(tests.common.TEST_GCS_BUCKET,
@@ -282,6 +285,8 @@ class TestCPRemote(unittest.TestCase):
 
         path_f111 = gswrap.resource_type(res_loc=test_case[0])
         path_ff = gswrap.resource_type(res_loc=test_case[1])
+        assert isinstance(path_f111, gswrap._GCSURL)
+        assert isinstance(path_ff, gswrap._GCSURL)
         blob_f11 = self.client._bucket.get_blob(path_f111.prefix)
         blob_ff = self.client._bucket.get_blob(path_ff.prefix)
 

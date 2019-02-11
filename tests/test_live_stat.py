@@ -18,15 +18,15 @@ import tests.common
 
 
 class TestStat(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         pass
 
-    def test_stat(self):
+    def test_stat(self) -> None:
         with temppathlib.NamedTemporaryFile() as file:
             file.path.write_text(tests.common.GCS_FILE_CONTENT)
 
@@ -39,17 +39,22 @@ class TestStat(unittest.TestCase):
 
                 gcs_stat = self.client.stat(url=url)
                 self.assertIsNotNone(gcs_stat)
+                self.assertIsInstance(gcs_stat, gswrap.Stat)
 
                 file_stat = file.path.stat()
                 self.assertIsNotNone(file_stat)
 
+                assert isinstance(gcs_stat, gswrap.Stat)
                 self.assertEqual(file_stat.st_size, gcs_stat.content_length)
 
+                assert isinstance(gcs_stat.file_mtime, datetime.datetime)
                 self.assertEqual(
                     datetime.datetime.utcfromtimestamp(
                         file_stat.st_mtime).replace(microsecond=0).timestamp(),
                     gcs_stat.file_mtime.timestamp())
 
+                assert isinstance(gcs_stat.posix_uid, str)
+                assert isinstance(gcs_stat.posix_gid, str)
                 self.assertEqual(file_stat.st_uid, int(gcs_stat.posix_uid))
                 self.assertEqual(file_stat.st_gid, int(gcs_stat.posix_gid))
                 self.assertEqual(
@@ -57,7 +62,7 @@ class TestStat(unittest.TestCase):
             finally:
                 tests.common.call_gsutil_rm(path=url, recursive=False)
 
-    def test_same_md5(self):
+    def test_same_md5(self) -> None:
         with temppathlib.NamedTemporaryFile() as file:
             file.path.write_text(tests.common.GCS_FILE_CONTENT)
 
@@ -72,7 +77,7 @@ class TestStat(unittest.TestCase):
             finally:
                 tests.common.call_gsutil_rm(path=url, recursive=False)
 
-    def test_different_md5(self):
+    def test_different_md5(self) -> None:
         with temppathlib.NamedTemporaryFile() as file:
             file.path.write_text(tests.common.GCS_FILE_CONTENT)
 
@@ -89,7 +94,7 @@ class TestStat(unittest.TestCase):
             finally:
                 tests.common.call_gsutil_rm(path=url, recursive=False)
 
-    def test_md5_hexdigest(self):
+    def test_md5_hexdigest(self) -> None:
         with temppathlib.TemporaryDirectory() as tmp_dir:
             path = tmp_dir.path / 'file'
             path.write_text('calculated md5 hash of this content')
@@ -137,7 +142,7 @@ class TestStat(unittest.TestCase):
                                              self.bucket_prefix),
                     recursive=True)
 
-    def test_same_modtime(self):
+    def test_same_modtime(self) -> None:
         with temppathlib.NamedTemporaryFile() as file:
             file.path.touch()
             file.path.write_text(tests.common.GCS_FILE_CONTENT)

@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import unittest
 import uuid
+from typing import Set
 
 import google.api_core.exceptions
 import temppathlib
@@ -22,7 +23,7 @@ import tests.common
 
 
 class TestCPDownload(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
@@ -30,11 +31,11 @@ class TestCPDownload(unittest.TestCase):
         tests.common.gcs_test_setup(
             tmp_dir_name=self.tmp_dir.name, prefix=self.bucket_prefix)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         tests.common.gcs_test_teardown(prefix=self.bucket_prefix)
         self.tmp_dir.cleanup()
 
-    def test_download_one_dir(self):
+    def test_download_one_dir(self) -> None:
         with temppathlib.TemporaryDirectory() as local_tmpdir:
             local_path = local_tmpdir.path / 'folder'
             local_path.mkdir()
@@ -52,7 +53,7 @@ class TestCPDownload(unittest.TestCase):
 
             self.assertEqual(text, downloaded_text)
 
-    def test_gsutil_vs_gswrap_download_recursive(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_download_recursive(self) -> None:  # pylint: disable=invalid-name
         # pylint: disable=too-many-locals
         with temppathlib.TemporaryDirectory() as tmp_dir:
             local_path = tmp_dir.path / 'tmp'
@@ -88,8 +89,8 @@ class TestCPDownload(unittest.TestCase):
                     , local_dir.as_posix()],
             ]
             # yapf: enable
-            gsutil_ls_set = set()
-            gcs_ls_set = set()
+            gsutil_ls_set = set()  # type: Set[str]
+            gcs_ls_set = set()  # type: Set[str]
 
             ls_path = tmp_dir.path.as_posix()
 
@@ -102,7 +103,7 @@ class TestCPDownload(unittest.TestCase):
                     src=test_case[0], dst=test_case[1], recursive=True)
 
                 gcs_paths = tests.common.ls_local(path=ls_path)
-                [gcs_ls_set.add(path) for path in gcs_paths]
+                gcs_ls_set.union(gcs_paths)
                 if pathlib.Path(test_case[1]).is_dir():
                     shutil.rmtree(test_case[1], True)
 
@@ -113,7 +114,7 @@ class TestCPDownload(unittest.TestCase):
                 tests.common.call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=True)
                 gsutil_paths = tests.common.ls_local(path=ls_path)
-                [gsutil_ls_set.add(path) for path in gsutil_paths]
+                gsutil_ls_set.union(gsutil_paths)
                 if pathlib.Path(test_case[1]).is_dir():
                     shutil.rmtree(test_case[1], True)
 
@@ -121,7 +122,7 @@ class TestCPDownload(unittest.TestCase):
 
             self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
 
-    def test_gsutil_vs_gswrap_download_recursive_check_raises(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_download_recursive_check_raises(self) -> None:  # pylint: disable=invalid-name
         # pylint: disable=too-many-locals
         with temppathlib.TemporaryDirectory() as tmp_dir:
             local_path = tmp_dir.path / 'tmp'
@@ -159,7 +160,7 @@ class TestCPDownload(unittest.TestCase):
                     dst=test_case[1],
                     recursive=True)
 
-    def test_gsutil_vs_gswrap_download_non_recursive(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_download_non_recursive(self) -> None:  # pylint: disable=invalid-name
         # pylint: disable=too-many-locals
         with temppathlib.TemporaryDirectory() as tmp_dir:
             local_path = tmp_dir.path / 'tmp'
@@ -185,8 +186,8 @@ class TestCPDownload(unittest.TestCase):
             ]
             # yapf: enable
 
-            gsutil_ls_set = set()
-            gcs_ls_set = set()
+            gsutil_ls_set = set()  # type: Set[str]
+            gcs_ls_set = set()  # type: Set[str]
 
             ls_path = tmp_dir.path.as_posix()
 
@@ -199,7 +200,7 @@ class TestCPDownload(unittest.TestCase):
                     src=test_case[0], dst=test_case[1], recursive=False)
 
                 gcs_paths = tests.common.ls_local(path=ls_path)
-                [gcs_ls_set.add(path) for path in gcs_paths]
+                gcs_ls_set.union(gcs_paths)
                 if pathlib.Path(test_case[1]).is_dir():
                     shutil.rmtree(test_case[1], True)
 
@@ -210,7 +211,7 @@ class TestCPDownload(unittest.TestCase):
                 tests.common.call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=False)
                 gsutil_paths = tests.common.ls_local(path=ls_path)
-                [gsutil_ls_set.add(path) for path in gsutil_paths]
+                gsutil_ls_set.union(gsutil_paths)
                 if pathlib.Path(test_case[1]).is_dir():
                     shutil.rmtree(test_case[1], True)
 
@@ -218,7 +219,7 @@ class TestCPDownload(unittest.TestCase):
 
             self.assertListEqual(list(gsutil_ls_set), list(gcs_ls_set))
 
-    def test_gsutil_vs_gswrap_download_non_recursive_check_raises(self):  # pylint: disable=invalid-name
+    def test_gsutil_vs_gswrap_download_non_recursive_check_raises(self) -> None:  # pylint: disable=invalid-name
         # pylint: disable=too-many-locals
         with temppathlib.TemporaryDirectory() as tmp_dir:
             local_path = tmp_dir.path / 'tmp'
@@ -268,7 +269,7 @@ class TestCPDownload(unittest.TestCase):
                     dst=test_case[1],
                     recursive=False)
 
-    def test_download_no_clobber(self):
+    def test_download_no_clobber(self) -> None:
         with temppathlib.TemporaryDirectory() as local_tmpdir:
             local_path = local_tmpdir.path / 'file'
             local_path.write_text("don't overwrite")
@@ -281,7 +282,7 @@ class TestCPDownload(unittest.TestCase):
 
             self.assertEqual("don't overwrite", local_path.read_text())
 
-    def test_download_clobber(self):
+    def test_download_clobber(self) -> None:
         with temppathlib.TemporaryDirectory() as local_tmpdir:
             local_path = local_tmpdir.path / 'file'
             local_path.write_text("overwrite file")
@@ -297,15 +298,15 @@ class TestCPDownload(unittest.TestCase):
 
 
 class TestCPDownloadNoCommonSetup(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         pass
 
-    def test_download_preserved_posix(self):
+    def test_download_preserved_posix(self) -> None:
         with temppathlib.TemporaryDirectory() as tmp_dir:
             setup_file = tmp_dir.path / 'file-to-download'
             setup_file.write_text(tests.common.GCS_FILE_CONTENT)
@@ -331,13 +332,17 @@ class TestCPDownloadNoCommonSetup(unittest.TestCase):
                 file_stat = file.stat()
                 self.assertIsNotNone(file_stat)
 
+                assert isinstance(gcs_stat, gswrap.Stat)
                 self.assertEqual(file_stat.st_size, gcs_stat.content_length)
 
+                assert isinstance(gcs_stat.file_mtime, datetime.datetime)
                 self.assertEqual(
                     datetime.datetime.utcfromtimestamp(
                         file_stat.st_mtime).replace(microsecond=0).timestamp(),
                     gcs_stat.file_mtime.timestamp())
 
+                assert isinstance(gcs_stat.posix_uid, str)
+                assert isinstance(gcs_stat.posix_gid, str)
                 self.assertEqual(file_stat.st_uid, int(gcs_stat.posix_uid))
                 self.assertEqual(file_stat.st_gid, int(gcs_stat.posix_gid))
                 self.assertEqual(gcs_stat.posix_mode,

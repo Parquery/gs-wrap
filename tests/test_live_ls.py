@@ -15,7 +15,7 @@ import tests.common
 
 
 class TestLS(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.client = gswrap.Client()
         self.client._change_bucket(tests.common.TEST_GCS_BUCKET)
         self.bucket_prefix = str(uuid.uuid4())
@@ -23,11 +23,11 @@ class TestLS(unittest.TestCase):
         tests.common.gcs_test_setup(
             tmp_dir_name=self.tmp_dir.name, prefix=self.bucket_prefix)
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         tests.common.gcs_test_teardown(prefix=self.bucket_prefix)
         self.tmp_dir.cleanup()
 
-    def test_gsutil_vs_gswrap_ls_non_recursive(self):
+    def test_gsutil_vs_gswrap_ls_non_recursive(self) -> None:
         # yapf: disable
         test_cases = [
             "gs://{}".format(tests.common.TEST_GCS_BUCKET),
@@ -50,7 +50,7 @@ class TestLS(unittest.TestCase):
 
             self.assertListEqual(list_gsutil, list_gcs)
 
-    def test_gsutil_vs_gswrap_ls_non_recursive_check_raises(self):
+    def test_gsutil_vs_gswrap_ls_non_recursive_check_raises(self) -> None:
         # yapf: disable
         test_cases = [
             "gs://{}".format(tests.common.TEST_GCS_BUCKET_NO_ACCESS),
@@ -66,7 +66,7 @@ class TestLS(unittest.TestCase):
                 url=test_case,
                 recursive=False)
 
-    def test_gsutil_vs_gswrap_ls_non_recursive_check_empty(self):
+    def test_gsutil_vs_gswrap_ls_non_recursive_check_empty(self) -> None:
         # yapf: disable
         test_cases = [
             "gs://{}/{}".format(tests.common.TEST_GCS_BUCKET,
@@ -80,7 +80,7 @@ class TestLS(unittest.TestCase):
                 RuntimeError, tests.common.call_gsutil_ls, path=test_case)
             self.assertEqual([], self.client.ls(url=test_case, recursive=False))
 
-    def test_gsutil_vs_gswrap_ls_recursive(self):
+    def test_gsutil_vs_gswrap_ls_recursive(self) -> None:
         # yapf: disable
         test_cases = [
             "gs://{}/{}".format(tests.common.TEST_GCS_BUCKET,
@@ -102,7 +102,7 @@ class TestLS(unittest.TestCase):
             # order of 'ls -r' is different
             self.assertListEqual(sorted(list_gsutil), sorted(list_gcs))
 
-    def test_gsutil_vs_gswrap_ls_recursive_check_raises(self):
+    def test_gsutil_vs_gswrap_ls_recursive_check_raises(self) -> None:
         # yapf: disable
         test_cases = [
             "gs://bucket-inexistent",  # google.api_core.exceptions.NotFound
@@ -124,7 +124,7 @@ class TestLS(unittest.TestCase):
                 url=test_case,
                 recursive=True)
 
-    def test_gsutil_vs_gswrap_ls_recursive_check_empty(self):
+    def test_gsutil_vs_gswrap_ls_recursive_check_empty(self) -> None:
         # yapf: disable
         test_cases = [
             "gs://{}/{}".format(tests.common.TEST_GCS_BUCKET,
@@ -141,7 +141,7 @@ class TestLS(unittest.TestCase):
                 recursive=True)
             self.assertEqual([], self.client.ls(url=test_case, recursive=True))
 
-    def test_long_ls_nonrecursive(self):
+    def test_long_ls_nonrecursive(self) -> None:
         entries = self.client.long_ls(
             url=('gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET, self.
                                          bucket_prefix)))
@@ -150,6 +150,7 @@ class TestLS(unittest.TestCase):
             'gs://{}/{}/d1/f11'.format(tests.common.TEST_GCS_BUCKET,
                                        self.bucket_prefix), entries[0][0])
 
+        assert isinstance(entries[0][1], gswrap.Stat)
         self.assertEqual(
             len(tests.common.GCS_FILE_CONTENT.encode('utf-8')),
             entries[0][1].content_length)
@@ -162,7 +163,7 @@ class TestLS(unittest.TestCase):
 
         self.assertTrue(entries[1][1] is None)
 
-    def test_long_ls_recursive(self):
+    def test_long_ls_recursive(self) -> None:
         entries = self.client.long_ls(
             url=('gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET,
                                          self.bucket_prefix)),
@@ -177,6 +178,7 @@ class TestLS(unittest.TestCase):
 
             self.assertEqual(url, entry[0])
 
+            assert isinstance(entry[1], gswrap.Stat)
             self.assertEqual(
                 len(tests.common.GCS_FILE_CONTENT.encode('utf-8')),
                 entry[1].content_length)

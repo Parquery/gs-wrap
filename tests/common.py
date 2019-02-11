@@ -19,7 +19,7 @@ TEST_GCS_BUCKET_NO_ACCESS = None  # type: str
 GCS_FILE_CONTENT = "test file"  # type: str
 
 
-def gcs_test_setup(tmp_dir_name: str, prefix: str):
+def gcs_test_setup(tmp_dir_name: str, prefix: str) -> None:
     """Create test folders structure to be used in the live test."""
     # yapf: disable
     gcs_file_structure = [
@@ -55,7 +55,7 @@ def gcs_test_setup(tmp_dir_name: str, prefix: str):
         recursive=True)
 
 
-def gcs_test_teardown(prefix: str):
+def gcs_test_teardown(prefix: str) -> None:
     """Remove created test folders structure which was used in the live test."""
     cmd = [
         "gsutil", "-m", "rm", "-r", "gs://{}/{}".format(TEST_GCS_BUCKET, prefix)
@@ -95,7 +95,7 @@ def call_gsutil_ls(path: str, recursive: bool = False) -> List[str]:
     return lines
 
 
-def call_gsutil_cp(src: str, dst: str, recursive: bool):
+def call_gsutil_cp(src: str, dst: str, recursive: bool) -> None:
     """Simple wrapper around gsutil cp command used to test the gs-wrap."""
     if recursive:
         cmd = ["gsutil", "-m", "cp", "-r", src, dst]
@@ -109,7 +109,7 @@ def call_gsutil_cp(src: str, dst: str, recursive: bool):
         stderr=subprocess.PIPE)
 
 
-def call_gsutil_rm(path: str, recursive: bool = False):
+def call_gsutil_rm(path: str, recursive: bool = False) -> None:
     """Simple wrapper around gsutil rm command used to test the gs-wrap."""
     if recursive:
         cmd = ["gsutil", "-m", "rm", "-r", path]

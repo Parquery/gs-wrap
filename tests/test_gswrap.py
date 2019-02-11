@@ -10,7 +10,7 @@ import gswrap
 
 
 class TestGCSURL(unittest.TestCase):
-    def test_expected_structure(self):
+    def test_expected_structure(self) -> None:
         gs_path = gswrap._GCSURL(
             bucket="bucket", prefix="folder-in-bucket/sub-dir")
 
@@ -19,7 +19,7 @@ class TestGCSURL(unittest.TestCase):
 
 
 class TestGSwrapFunctions(unittest.TestCase):
-    def test_contains_wildcard(self):
+    def test_contains_wildcard(self) -> None:
         no_wildcard = 'no wildcard here'
         asterisk = '*/somedir'
         questionmark = 'f?lder'
@@ -30,17 +30,17 @@ class TestGSwrapFunctions(unittest.TestCase):
         self.assertTrue(gswrap.contains_wildcard(prefix=questionmark))
         self.assertTrue(gswrap.contains_wildcard(prefix=double_asterisk))
 
-    def test_classify_gcs_url(self):
+    def test_classify_gcs_url(self) -> None:
         bucket = 'your-bucket'
         prefix = 'your-dir/sub-dir'
         link = 'gs://' + bucket + '/' + prefix
         url = gswrap.resource_type(res_loc=link)
 
-        self.assertTrue(isinstance(url, gswrap._GCSURL))
+        assert isinstance(url, gswrap._GCSURL)
         self.assertEqual(bucket, url.bucket)
         self.assertEqual(prefix, url.prefix)
 
-    def test_classify_local_url(self):
+    def test_classify_local_url(self) -> None:
         path = '/home/user/'
         url = gswrap.resource_type(res_loc=path)
 
