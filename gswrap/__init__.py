@@ -13,7 +13,7 @@ import pathlib
 import re
 import shutil
 import urllib.parse
-from typing import List, Optional, Sequence, Tuple, Union
+from typing import Iterable, List, Optional, Sequence, Tuple, Union
 
 import google.api_core.exceptions
 import google.api_core.page_iterator
@@ -583,43 +583,45 @@ class Client:
             if set to False the copy will be performed single-threaded.
             If set to True it will use multiple threads to perform the copy.
         """
-        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
-        max_workers = None if multithreaded else 1
+        ##########################
+        # Prepare the parameters #
+        ##########################
+        if recursive:
+            delimiter = ''
+        else:
+            delimiter = '/'
 
-        futures = []  # List[concurrent.futures.Future]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
-                as executor:
+        if src.prefix.endswith('/'):
+            src_prefix = src.prefix[:-1]
+        else:
+            src_prefix = src.prefix
 
-            if recursive:
-                delimiter = ''
-            else:
-                delimiter = '/'
+        self._change_bucket(bucket_name=src.bucket)
+        src_bucket = self._bucket
 
-            if src.prefix.endswith('/'):
-                src_prefix = src.prefix[:-1]
-            else:
-                src_prefix = src.prefix
+        first_page = src_bucket.list_blobs(
+            prefix=src_prefix, delimiter=delimiter)._next_page()
+        num_items = first_page.num_items
+        if num_items == 0:
+            raise google.api_core.exceptions.GoogleAPIError('No URLs matched')
 
-            self._change_bucket(bucket_name=src.bucket)
-            src_bucket = self._bucket
+        src_is_dir = num_items > 1
+        if not recursive and src_is_dir:
+            raise ValueError(
+                "Cannot copy gs://{}/{} to gs://{}/{} (Did you mean to do "
+                "cp recursive?)".format(src.bucket, src.prefix, dst.bucket,
+                                        dst.prefix))
 
-            first_page = src_bucket.list_blobs(
-                prefix=src_prefix, delimiter=delimiter)._next_page()
-            num_items = first_page.num_items
-            if num_items == 0:
-                raise google.api_core.exceptions.GoogleAPIError(
-                    'No URLs matched')
+        #####################################
+        # Generate sources and destinations #
+        #####################################
+        dst_bucket = self._client.get_bucket(bucket_name=dst.bucket)
+        blobs_iterator = src_bucket.list_blobs(
+            prefix=src_prefix, delimiter=delimiter)
 
-            src_is_dir = num_items > 1
-            if not recursive and src_is_dir:
-                raise ValueError(
-                    "Cannot copy gs://{}/{} to gs://{}/{} (Did you mean to do "
-                    "cp recursive?)".format(src.bucket, src.prefix, dst.bucket,
-                                            dst.prefix))
-
-            dst_bucket = self._client.get_bucket(bucket_name=dst.bucket)
-            blobs_iterator = src_bucket.list_blobs(
-                prefix=src_prefix, delimiter=delimiter)
+        def generate_cp_files(
+        ) -> Iterable[Tuple[google.cloud.storage.blob.Blob, str]]:
+            """Generate sources and destinations."""
             for blob in blobs_iterator:
                 blob_name = _rename_destination_blob(
                     blob_name=blob.name, src=src, dst=dst).as_posix()
@@ -629,15 +631,27 @@ class Client:
                         blob_name=blob_name) is not None:
                     continue
 
-                copy_thread = executor.submit(
+                yield blob, blob_name
+
+        ###########
+        # Execute #
+        ###########
+
+        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
+        max_workers = None if multithreaded else 1
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
+                as executor:
+            futures = [
+                executor.submit(
                     src_bucket.copy_blob,
                     blob=blob,
                     destination_bucket=dst_bucket,
                     new_name=blob_name)
-                futures.append(copy_thread)
+                for blob, blob_name in generate_cp_files()
+            ]
 
-        for future in futures:
-            future.result()
+            for future in futures:
+                _ = future.result()
 
     # pylint: disable=too-many-arguments
     # pylint: disable=too-many-locals
@@ -660,6 +674,9 @@ class Client:
             if set to False the upload will be performed single-threaded.
             If set to True it will use multiple threads to perform the upload.
         """
+        ########################
+        # Collect upload files #
+        ########################
         upload_files = []  # type: List[str]
 
         # copy one file to one location incl. renaming
@@ -682,14 +699,15 @@ class Client:
                 "Cannot upload {} to gs://{}/{} (Did you mean to do cp "
                 "recursive?)".format(src, dst.bucket, dst.prefix))
 
+        #####################################
+        # Generate sources and destinations #
+        #####################################
         self._change_bucket(bucket_name=dst.bucket)
         bucket = self._bucket
 
-        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
-        max_workers = None if multithreaded else 1
-        futures = []  # List[concurrent.futures.Future]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
-                as executor:
+        def generate_upload_files(
+        ) -> Iterable[Tuple[google.cloud.storage.blob.Blob, pathlib.Path]]:
+            """Generate sources and destinations."""
             for file_name in upload_files:
                 # pathlib can't join paths when second part starts with '/'
                 if file_name.startswith('/'):
@@ -719,15 +737,29 @@ class Client:
 
                 blob = bucket.blob(blob_name=blob_name_str)
                 file_path = pathlib.Path(src) / file_name
-                upload_thread = executor.submit(
+                yield blob, file_path
+
+        ###########
+        # Execute #
+        ###########
+
+        # None is ThreadPoolExecutor max_workers default.
+        # 1 is single-threaded.
+        max_workers = None if multithreaded else 1
+        with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max_workers) as executor:
+
+            futures = [
+                executor.submit(
                     _upload_from_path,
                     blob=blob,
-                    path=file_path.as_posix(),
+                    path=pth.as_posix(),
                     preserve_posix=preserve_posix)
-                futures.append(upload_thread)
+                for blob, pth in generate_upload_files()
+            ]
 
-        for future in futures:
-            future.result()
+            for future in futures:
+                _ = future.result()
 
     # pylint: disable=too-many-arguments
     # pylint: disable=too-many-locals
@@ -750,6 +782,9 @@ class Client:
             if set to False the download will be performed single-threaded.
             If set to True it will use multiple threads to perform the download.
         """
+        ##########################
+        # Prepare the parameters #
+        ##########################
         src_prefix_parent = pathlib.Path(src.prefix)
         src_prefix_parent = src_prefix_parent.parent
         src_gcs_prefix_parent = src_prefix_parent.as_posix()
@@ -773,15 +808,16 @@ class Client:
         if num_items == 0:
             raise google.api_core.exceptions.GoogleAPIError('No URLs matched')
 
+        #####################################
+        # Generate sources and destinations #
+        #####################################
         dst_path = pathlib.Path(dst)
         blob_iterator = bucket.list_blobs(
             prefix=src_prefix, delimiter=delimiter)
 
-        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
-        max_workers = None if multithreaded else 1
-        futures = []  # List[concurrent.futures.Future]
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
-                as executor:
+        def generate_download_files(
+        ) -> Iterable[Tuple[google.cloud.storage.blob.Blob, pathlib.Path]]:
+            """Generate sources and destinations."""
             for blob in blob_iterator:
                 blob_prefix = blob.name
                 file_name = blob_prefix.replace(src_gcs_prefix_parent, '', 1)
@@ -801,15 +837,27 @@ class Client:
                 file_path_parent = pathlib.Path(file_path.parent)
                 file_path_parent.mkdir(parents=True, exist_ok=True)
 
-                download_thread = executor.submit(
+                yield blob, file_path
+
+        ###########
+        # Execute #
+        ###########
+
+        # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
+        max_workers = None if multithreaded else 1
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
+                as executor:
+            futures = [
+                executor.submit(
                     _download_to_path,
                     blob=blob,
-                    path=file_path.as_posix(),
+                    path=pth.as_posix(),
                     preserve_posix=preserve_posix)
-                futures.append(download_thread)
+                for blob, pth in generate_download_files()
+            ]
 
-        for future in futures:
-            future.result()
+            for future in futures:
+                _ = future.result()
 
     def cp_many_to_many(
             self,
@@ -871,22 +919,21 @@ class Client:
         """
         # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
-        futures = []  # List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(
                 max_workers=max_workers) as executor:
-            for src, dst in srcs_dsts:
-                cp_thread = executor.submit(
+            futures = [
+                executor.submit(
                     self.cp,
                     src=src,
                     dst=dst,
                     recursive=recursive,
                     no_clobber=no_clobber,
                     multithreaded=multithreaded,
-                    preserve_posix=preserve_posix)
-                futures.append(cp_thread)
+                    preserve_posix=preserve_posix) for src, dst in srcs_dsts
+            ]
 
-        for future in futures:
-            future.result()
+            for future in futures:
+                _ = future.result()
 
     @icontract.require(lambda url: url.startswith('gs://'))
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
@@ -931,6 +978,9 @@ class Client:
                              "(Did you mean to do rm recursive?)".format(
                                  rm_url.bucket, rm_url.prefix))
         else:
+            ##########################
+            # Prepare the parameters #
+            ##########################
             if recursive:
                 delimiter = ''
             else:
@@ -946,22 +996,29 @@ class Client:
             if first_page.num_items == 0:
                 raise google.api_core.exceptions.NotFound('No URLs matched')
 
+            #######################
+            # Generate removables #
+            #######################
             blob_iterator = bucket.list_blobs(
                 prefix=gcs_url_prefix, delimiter=delimiter)
+
+            ###########
+            # Execute #
+            ###########
 
             # None is ThreadPoolExecutor max_workers default.
             # 1 is single-threaded
             max_workers = None if multithreaded else 1
-            futures = []  # List[concurrent.futures.Future]
             with concurrent.futures.ThreadPoolExecutor(
                     max_workers=max_workers) as executor:
-                for blob_to_delete in blob_iterator:
-                    delete_thread = executor.submit(
+                futures = [
+                    executor.submit(
                         bucket.delete_blob, blob_name=blob_to_delete.name)
-                    futures.append(delete_thread)
+                    for blob_to_delete in blob_iterator
+                ]
 
-            for future in futures:
-                future.result()
+                for future in futures:
+                    _ = future.result()
 
     @icontract.require(lambda url: url.startswith('gs://'))
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
@@ -1195,11 +1252,10 @@ class Client:
 
         # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
-        stat_futures = []  # List[concurrent.futures.Future]
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) \
                 as executor:
-            for url in urls:
-                stat_futures.append(executor.submit(self.stat, url=url))
+
+            stat_futures = [executor.submit(self.stat, url=url) for url in urls]
 
             for stat_future in stat_futures:
                 stat = stat_future.result()
@@ -1209,8 +1265,5 @@ class Client:
                 else:
                     assert isinstance(stat.md5, bytes)
                     hexdigests.append(base64.b64decode(stat.md5).hex())
-
-        for future in stat_futures:
-            future.result()
 
         return hexdigests
