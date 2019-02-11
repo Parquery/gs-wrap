@@ -103,7 +103,7 @@ class TestCPDownload(unittest.TestCase):
                     src=test_case[0], dst=test_case[1], recursive=True)
 
                 gcs_paths = tests.common.ls_local(path=ls_path)
-                gcs_ls_set.union([path for path in gcs_paths])
+                gcs_ls_set.union(gcs_paths)
                 if pathlib.Path(test_case[1]).is_dir():
                     shutil.rmtree(test_case[1], True)
 
@@ -114,7 +114,7 @@ class TestCPDownload(unittest.TestCase):
                 tests.common.call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=True)
                 gsutil_paths = tests.common.ls_local(path=ls_path)
-                gsutil_ls_set.union([path for path in gsutil_paths])
+                gsutil_ls_set.union(gsutil_paths)
                 if pathlib.Path(test_case[1]).is_dir():
                     shutil.rmtree(test_case[1], True)
 
@@ -200,7 +200,7 @@ class TestCPDownload(unittest.TestCase):
                     src=test_case[0], dst=test_case[1], recursive=False)
 
                 gcs_paths = tests.common.ls_local(path=ls_path)
-                gcs_ls_set.union([path for path in gcs_paths])
+                gcs_ls_set.union(gcs_paths)
                 if pathlib.Path(test_case[1]).is_dir():
                     shutil.rmtree(test_case[1], True)
 
@@ -211,7 +211,7 @@ class TestCPDownload(unittest.TestCase):
                 tests.common.call_gsutil_cp(
                     src=test_case[0], dst=test_case[1], recursive=False)
                 gsutil_paths = tests.common.ls_local(path=ls_path)
-                gsutil_ls_set.union([path for path in gsutil_paths])
+                gsutil_ls_set.union(gsutil_paths)
                 if pathlib.Path(test_case[1]).is_dir():
                     shutil.rmtree(test_case[1], True)
 

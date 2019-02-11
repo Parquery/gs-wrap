@@ -126,7 +126,7 @@ class TestCPRemote(unittest.TestCase):
         for test_case in test_cases:
             self.client.cp(src=test_case[0], dst=test_case[1], recursive=True)
             gcs_paths = self.client.ls(url=ls_path, recursive=True)
-            gcs_ls_set.union([path for path in gcs_paths])
+            gcs_ls_set.union(gcs_paths)
             tests.common.call_gsutil_rm(
                 path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                           self.bucket_prefix),
@@ -137,7 +137,7 @@ class TestCPRemote(unittest.TestCase):
             tests.common.call_gsutil_cp(
                 src=test_case[0], dst=test_case[1], recursive=True)
             gsutil_paths = self.client.ls(url=ls_path, recursive=True)
-            gsutil_ls_set.union([path for path in gsutil_paths])
+            gsutil_ls_set.union(gsutil_paths)
             tests.common.call_gsutil_rm(
                 path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                           self.bucket_prefix),
@@ -180,7 +180,7 @@ class TestCPRemote(unittest.TestCase):
         for test_case in test_cases:
             self.client.cp(src=test_case[0], dst=test_case[1], recursive=False)
             gcs_paths = self.client.ls(url=ls_path, recursive=True)
-            gcs_ls_set.union([path for path in gcs_paths])
+            gcs_ls_set.union(gcs_paths)
             tests.common.call_gsutil_rm(
                 path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                           self.bucket_prefix),
@@ -191,7 +191,7 @@ class TestCPRemote(unittest.TestCase):
             tests.common.call_gsutil_cp(
                 src=test_case[0], dst=test_case[1], recursive=False)
             gsutil_paths = self.client.ls(url=ls_path, recursive=True)
-            gsutil_ls_set.union([path for path in gsutil_paths])
+            gsutil_ls_set.union(gsutil_paths)
             tests.common.call_gsutil_rm(
                 path="gs://{}/{}/".format(tests.common.TEST_GCS_BUCKET,
                                           self.bucket_prefix),
