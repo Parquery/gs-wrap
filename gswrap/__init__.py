@@ -42,7 +42,7 @@ class _GCSURL:
         """
         self.bucket = bucket
 
-        # prefixes in google cloud storage never have a leading slash
+        # prefixes in Google Cloud Storage never have a leading slash
         if prefix.startswith('/'):
             prefix = prefix[1:]
 
@@ -168,11 +168,11 @@ class Stat:
 
     Times are given in UTC.
 
-    :ivar creation_time: time when blob on google cloud storage was created.
+    :ivar creation_time: time when blob on Google Cloud Storage was created.
         Not equal creation time of the local file.
     :vartype creation_time: Optional[datetime.datetime]
 
-    :ivar update_time: time when blob on google cloud storage was last updated.
+    :ivar update_time: time when blob on Google Cloud Storage was last updated.
         Not equal modification time of the local file.
     :vartype update_time: Optional[datetime.datetime]
 
@@ -360,21 +360,23 @@ class Client:
         wildcards are allowed. For more information about "gsutil ls" check out:
         https://cloud.google.com/storage/docs/gsutil/commands/ls
 
-        | existing blob at your storage:
-        | gs://your-bucket/something
+        | client.ls(gcs_url="gs://your-bucket/your-dir", recursive=False)
+        | # gs://your-bucket/your-dir/your-subdir1/
+        | # gs://your-bucket/your-dir/your-subdir2/
+        | # gs://your-bucket/your-dir/file1
 
-        | ls(url="gs://your-bucket/some", recursive=True)
-        | will raise a GoogleAPI error because no url is matching
+        | client.ls(gcs_url="gs://your-bucket/your-dir", recursive=True)
+        | # gs://your-bucket/your-dir/your-subdir1/file1
+        | # gs://your-bucket/your-dir/your-subdir1/file2
+        | # gs://your-bucket/your-dir/your-subdir2/file1
+        | # gs://your-bucket/your-dir/file1
 
-        | if there is another blob:
-        | gs://your-bucket/some/blob
+        | client.ls(url="gs://your-bucket/your-", recursive=True)
+        | will return an empty list
 
-        | ls(url="gs://your-bucket/some", recursive=True)
-        | will return this blob: "gs://your-bucket/some/blob"
-
-        :param url: Google cloud storage URL
+        :param url: Google Cloud Storage URL
         :param recursive: List only direct subdirectories
-        :return: List of Google cloud storage URLs according the given URL
+        :return: List of Google Cloud Storage URLs according the given URL
         """
         ls_url = resource_type(res_loc=url)
 
@@ -425,7 +427,13 @@ class Client:
         """
         List URLs with their stats given the url.
 
-        :param url: Google cloud storage URL
+        | client.long_ls(gcs_url="gs://your-bucket/your-dir", recursive=False)
+        | # ('gs://your-bucket/your-dir/your-subdir1/', None)
+        | # ('gs://your-bucket/your-dir/your-subdir2/' None)
+        | # ('gs://your-bucket/your-dir/file1,
+        |    <gswrap.Stat object at 0x7fea01c4a550>)
+
+        :param url: Google Cloud Storage URL
         :param recursive:
             if True, list directories recursively
             if False, list only direct subdirectory
@@ -500,7 +508,7 @@ class Client:
             stat. These are the user ID of the owner, the group ID of the
             owning group, the mode (permissions) of the file, and the
             access/modification time of the file. POSIX attributes are always
-            preserved when blob is copied on google cloud storage.
+            preserved when blob is copied on Google Cloud Storage.
         """
         src_str = src if isinstance(src, str) else src.as_posix()
         dst_str = dst if isinstance(dst, str) else dst.as_posix()
@@ -818,6 +826,25 @@ class Client:
         Only one function call minimizes the overhead and the operations
         can be performed significantly faster.
 
+        | sources_destinations = [
+        |     # Copy on Google Cloud Storage
+        |     ('gs://your-bucket/your-dir/file',
+        |      'gs://your-bucket/backup-dir/file'),
+
+        |     # Copy from gcs to local
+        |     ('gs://your-bucket/your-dir/file',
+        |      pathlib.Path('/home/user/storage/backup-file')),
+
+        |     # Copy from local to gcs
+        |     (pathlib.Path('/home/user/storage/new-file'),
+        |      'gs://your-bucket/your-dir/new-file'),
+
+        |     # Copy locally
+        |     (pathlib.Path('/home/user/storage/file'),
+        |      pathlib.Path('/home/user/storage/new-file'))]
+
+        | client.cp_many_to_many(srcs_dsts=sources_destinations)
+
         :param srcs_dsts: source URLs/paths and destination URLs/paths
         :param recursive:
             (from https://cloud.google.com/storage/docs/gsutil/commands/cp)
@@ -840,7 +867,7 @@ class Client:
             stat. These are the user ID of the owner, the group ID of the
             owning group, the mode (permissions) of the file, and the
             access/modification time of the file. POSIX attributes are always
-            preserved when blob is copied on google cloud storage.
+            preserved when blob is copied on Google Cloud Storage.
         """
         # None is ThreadPoolExecutor max_workers default. 1 is single-threaded
         max_workers = None if multithreaded else 1
@@ -868,9 +895,23 @@ class Client:
     def rm(self, url: str, recursive: bool = False,
            multithreaded: bool = False) -> None:
         """
-        Remove blobs at given URL from google cloud storage.
+        Remove blobs at given URL from Google Cloud Storage.
 
-        :param url: google cloud storage URL
+        | # your-bucket before:
+        | # gs://your-bucket/file
+        | client.rm(url="gs://your-bucket/file")
+        | # your-bucket after:
+        | # "empty"
+
+        | # your-bucket before:
+        | # gs://your-bucket/file1
+        | # gs://your-bucket/your-dir/file2
+        | # gs://your-bucket/your-dir/sub-dir/file3
+        | client.rm(url="gs://your-bucket/your-dir", recursive=True)
+        | # your-bucket after:
+        | # gs://your-bucket/file1
+
+        :param url: Google Cloud Storage URL
         :param recursive: if True remove files within folders
         :param multithreaded:
             if set to False the remove will be performed single-threaded.
@@ -930,6 +971,10 @@ class Client:
 
         The caller is expected to make sure that the file fits in memory.
 
+        | data = client.read_bytes(url="gs://your-bucket/data")
+        | data.decode('utf-8')
+        | # I'm important data
+
         :param url: to the blob on the storage
         :return: bytes of the blob
         """
@@ -953,6 +998,10 @@ class Client:
 
         The caller is expected to make sure that the file fits in memory.
 
+        | client.read_text(url="gs://your-bucket/file",
+        |          encoding='utf-8')
+        | # Hello I'm text
+
         :param url: to the blob on the storage
         :param encoding: used to decode the text, defaults to 'utf-8'
         :return: text of the blob
@@ -964,6 +1013,9 @@ class Client:
     def write_bytes(self, url: str, data: bytes) -> None:
         """
         Write bytes to the storage at the given URL.
+
+        | client.write_bytes(url="gs://your-bucket/data",
+        |            data="I'm important data".encode('utf-8'))
 
         :param url: where to write in the storage
         :param data: what to write
@@ -984,6 +1036,10 @@ class Client:
         """
         Write bytes to the storage at the given URL.
 
+        | client.write_text(url="gs://your-bucket/file",
+        |           text="Hello, I'm text",
+        |           encoding='utf-8')
+
         :param url: where to write in the storage
         :param text: what to write
         :param encoding: how to encode, defaults to 'utf-8'
@@ -996,6 +1052,19 @@ class Client:
     def stat(self, url: str) -> Optional[Stat]:
         """
         Retrieve the stat of the object in the Google Cloud Storage.
+
+        | stats = client.stat(url="gs://your-bucket/file")
+        | stats.creation_time  # 2018-11-21 13:27:46.255000+00:00
+        | stats.update_time  # 2018-11-21 13:27:46.255000+00:00
+        | stats.content_length  # 1024 [bytes]
+        | stats.storage_class  # REGIONAL
+        | stats.file_atime  # 2018-11-21 13:27:46
+        | stats.file_mtime  # 2018-11-21 13:27:46
+        | stats.posix_uid  # 1000
+        | stats.posix_gid  # 1000
+        | stats.posix_mode  # 777
+        | stats.md5  # b'1B2M2Y8AsgTpgAmY7PhCfg=='
+        | stats.crc32c  # b'AAAAAA=='
 
         :param url: to the object
         :return: object status,
@@ -1049,6 +1118,9 @@ class Client:
 
         Mind that you need to copy the object with -P (preserve posix) flag.
 
+        | client.same_modtime(path='/home/user/storage/file',
+        |                     url='gs://your-bucket/file')
+
         :param path: to the local file
         :param url: URL to an object
         :return: True if the modification time is the same
@@ -1070,6 +1142,9 @@ class Client:
         """
         Check if the MD5 differs between the local file and the blob.
 
+        | client.same_md5(path='/home/user/storage/file',
+        |                 url='gs://your-bucket/file')
+
         :param path: to the local file
         :param url:  to the remote object in Google storage
         :return:
@@ -1087,7 +1162,7 @@ class Client:
 
         hsh = hashlib.md5()
         # https://googleapis.github.io/google-cloud-python/latest/_modules/google/cloud/storage/_helpers.html
-        # default block_size of google cloud storage (_write_buffer_to_hash)
+        # default block_size of Google Cloud Storage (_write_buffer_to_hash)
         block_size = 8192
         with open(pth_str, 'rb') as fid:
             while True:
@@ -1104,6 +1179,9 @@ class Client:
             -> List[Optional[str]]:
         """
         Retrieve hex digests of MD5 checksums for multiple URLs.
+
+        | urls = ['gs://your-bucket/file1', 'gs://your-bucket/file2']
+        | client.md5_hexdigests(urls=urls, multithreaded=False)
 
         :param urls: URLs to stat and retrieve MD5 of
         :param multithreaded:
