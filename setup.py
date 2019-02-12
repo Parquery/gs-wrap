@@ -35,16 +35,16 @@ setup(
     install_requires=[
         # yapf: disable
         'typing-extensions>=3.7.2',
-        'icontract>=2.0.1,<3',
-        'google-cloud-storage>=1.13.2,<2'
+        'icontract>=2.0.2,<3',
+        'google-cloud-storage>=1.14.0,<2'
         # yapf: enable
     ],
     extras_require={
         'dev': [
             # yapf: disable
-            'mypy==0.660',
+            'mypy==0.670',
             'pylint==2.2.2',
-            'yapf==0.25.0',
+            'yapf==0.26.0',
             'tox>=3.7.0',
             'coverage>=4.5.2,<5',
             'pydocstyle>=3.0.0,<4',
@@ -56,8 +56,8 @@ setup(
             'temppathlib>=1.0.3,<2',
             'gsutilwrap>=1.1.2,<2',
             'twine>=1.12.1,<2',
-            'setuptools>=40.6.3,<41',
-            'wheel>=0.32.3,<1'
+            'setuptools>=40.8.0,<41',
+            'wheel>=0.33.0,<1'
             # yapf: enable
         ]
     },

@@ -143,8 +143,8 @@ class TestLS(unittest.TestCase):
 
     def test_long_ls_nonrecursive(self) -> None:
         entries = self.client.long_ls(
-            url=('gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET, self.
-                                         bucket_prefix)))
+            url=('gs://{}/{}/d1/'.format(tests.common.TEST_GCS_BUCKET,
+                                         self.bucket_prefix)))
 
         self.assertEqual(
             'gs://{}/{}/d1/f11'.format(tests.common.TEST_GCS_BUCKET,

@@ -866,8 +866,8 @@ class Client:
 
     def cp_many_to_many(
             self,
-            srcs_dsts: Sequence[Tuple[Union[str, pathlib.
-                                            Path], Union[str, pathlib.Path]]],
+            srcs_dsts: Sequence[
+                Tuple[Union[str, pathlib.Path], Union[str, pathlib.Path]]],
             recursive: bool = False,
             no_clobber: bool = False,
             multithreaded: bool = False,
