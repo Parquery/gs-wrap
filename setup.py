@@ -31,7 +31,7 @@ setup(
     ],
     license='License :: OSI Approved :: MIT License',
     keywords='gsutil google cloud storage wrap',
-    packages=find_packages(exclude=['tests']),
+    packages=find_packages(exclude=['tests', 'benchmark']),
     install_requires=[
         # yapf: disable
         'typing-extensions>=3.7.2',
