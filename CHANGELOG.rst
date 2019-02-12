@@ -1,3 +1,13 @@
+1.0.3
+=====
+* Added mypy --strict flag in precommit.py and fixed corresponding errors
+* Fixed mkdir race condition when downloading
+* Updated docstrings with examples
+* Re-structured multi-threading execution by adding nested functions and titles
+  for readability
+* Excluded benchmark module from distribution
+* Updated dependencies and re-formatted code for new yapf version
+
 1.0.2
 =====
 * Fixed downloading a file into a directory bug and added testcase
