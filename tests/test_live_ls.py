@@ -54,7 +54,7 @@ class TestLS(unittest.TestCase):
         # yapf: disable
         test_cases = [
             "gs://{}".format(tests.common.TEST_GCS_BUCKET_NO_ACCESS),
-            "gs://{}".format(tests.common.TEST_GCS_BUCKET[:-1]),
+            "gs://{}-{}".format(tests.common.TEST_GCS_BUCKET, uuid.uuid4()),
         ]
         # yapf: enable
         for test_case in test_cases:
@@ -69,8 +69,8 @@ class TestLS(unittest.TestCase):
     def test_gsutil_vs_gswrap_ls_non_recursive_check_empty(self) -> None:
         # yapf: disable
         test_cases = [
-            "gs://{}/{}".format(tests.common.TEST_GCS_BUCKET,
-                                self.bucket_prefix[:-1]),
+            "gs://{}/{}-{}".format(tests.common.TEST_GCS_BUCKET,
+                                self.bucket_prefix, uuid.uuid4()),
             "gs://{}/{}/d".format(tests.common.TEST_GCS_BUCKET,
                                   self.bucket_prefix),
         ]
@@ -105,10 +105,9 @@ class TestLS(unittest.TestCase):
     def test_gsutil_vs_gswrap_ls_recursive_check_raises(self) -> None:
         # yapf: disable
         test_cases = [
-            "gs://bucket-inexistent",  # google.api_core.exceptions.NotFound
             "gs://{}".format(tests.common.TEST_GCS_BUCKET_NO_ACCESS),
             # google.api_core.exceptions.Forbidden
-            "gs://{}".format(tests.common.TEST_GCS_BUCKET[:-1]),
+            "gs://{}-{}".format(tests.common.TEST_GCS_BUCKET, uuid.uuid4()),
             # google.api_core.exceptions.NotFound
         ]
         # yapf: enable
