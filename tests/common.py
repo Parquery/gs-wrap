@@ -14,8 +14,21 @@ from typing import List
 # https://github.com/googleapis/google-cloud-python/issues/4897
 # https://github.com/googleapis/google-cloud-python/issues/4840
 
-TEST_GCS_BUCKET = None  # type: str
-TEST_GCS_BUCKET_NO_ACCESS = None  # type: str
+if 'TEST_GCS_BUCKET' not in os.environ:
+    raise RuntimeError(
+        "Expected the environment variable TEST_GCS_BUCKET to be defined. "
+        "This should be the name of the bucket that will be used for tests. "
+        "For example, 'some-test-bucket'.")
+
+if 'TEST_GCS_BUCKET_NO_ACCESS' not in os.environ:
+    raise RuntimeError(
+        "Expected the environment variable TEST_GCS_BUCKET_NO_ACCESS "
+        "to be defined. "
+        "This should be the name of the bucket to which we do not have access "
+        "to. For example, 'some-inaccessible-test-bucket'.")
+
+TEST_GCS_BUCKET = os.environ['TEST_GCS_BUCKET']  # type: str
+TEST_GCS_BUCKET_NO_ACCESS = os.environ['TEST_GCS_BUCKET_NO_ACCESS']
 GCS_FILE_CONTENT = "test file"  # type: str
 
 
