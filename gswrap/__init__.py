@@ -1150,8 +1150,8 @@ class Client:
         result.update_time = blob.updated
         result.storage_class = blob.storage_class
         result.content_length = int(blob.size)
-        result.crc32c = bytes(blob.crc32c, encoding='utf-8')
-        result.md5 = bytes(blob.md5_hash, encoding='utf-8')
+        result.crc32c = base64.b64decode(blob.crc32c)
+        result.md5 = base64.b64decode(blob.md5_hash)
 
         metadata = blob.metadata
         if metadata is not None:
@@ -1235,7 +1235,7 @@ class Client:
                     break
                 hsh.update(buf)
 
-        local_md5 = base64.b64encode(hsh.digest())
+        local_md5 = hsh.digest()
 
         return url_stat.md5 == local_md5
 
@@ -1271,6 +1271,6 @@ class Client:
                     hexdigests.append(None)
                 else:
                     assert isinstance(stat.md5, bytes)
-                    hexdigests.append(base64.b64decode(stat.md5).hex())
+                    hexdigests.append(stat.md5.hex())
 
         return hexdigests

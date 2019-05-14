@@ -59,6 +59,17 @@ class TestStat(unittest.TestCase):
                 self.assertEqual(file_stat.st_gid, int(gcs_stat.posix_gid))
                 self.assertEqual(
                     oct(file_stat.st_mode)[-3:], gcs_stat.posix_mode)
+
+                assert gcs_stat.md5 is not None
+                self.assertEqual(
+                    b'\xf2\r\x9f r\xbb\xebf\x91\xc0\xf9\xc5\t\x9b\x01\xf3',
+                    gcs_stat.md5)
+                self.assertEqual('f20d9f2072bbeb6691c0f9c5099b01f3',
+                                 gcs_stat.md5.hex())
+
+                assert gcs_stat.crc32c is not None
+                self.assertEqual(b'\xd1\x04\x0c\xa8', gcs_stat.crc32c)
+                self.assertEqual('d1040ca8', gcs_stat.crc32c.hex())
             finally:
                 tests.common.call_gsutil_rm(path=url, recursive=False)
 
