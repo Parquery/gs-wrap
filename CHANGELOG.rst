@@ -1,3 +1,9 @@
+1.0.4
+=====
+* ``crc32c`` and ``md5`` in ``Stat`` are decoded into actual bytes.
+  Google client sends crc32s and md5 of the objects base-64 encoded which
+  is confusing for the end users.
+
 1.0.3
 =====
 * Added mypy --strict flag in precommit.py and fixed corresponding errors
