@@ -43,7 +43,7 @@ setup(
         'dev': [
             # yapf: disable
             'mypy==0.670',
-            'pylint==2.2.2',
+            'pylint==2.3.1',
             'yapf==0.26.0',
             'tox>=3.7.0',
             'coverage>=4.5.2,<5',
