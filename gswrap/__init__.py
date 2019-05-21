@@ -348,7 +348,7 @@ class Client:
         :param bucket_name: name of the bucket to activate
         """
         if self._bucket is None or bucket_name != self._bucket.name:
-            self._bucket = self._client.get_bucket(bucket_name=bucket_name)
+            self._bucket = self._client.get_bucket(bucket_name)
 
     @icontract.require(lambda url: url.startswith('gs://'))
     @icontract.require(lambda url: not contains_wildcard(prefix=url))
@@ -617,7 +617,7 @@ class Client:
         # Generate sources and destinations
         ##
 
-        dst_bucket = self._client.get_bucket(bucket_name=dst.bucket)
+        dst_bucket = self._client.get_bucket(dst.bucket)
         blobs_iterator = src_bucket.list_blobs(
             prefix=src_prefix, delimiter=delimiter)
 
