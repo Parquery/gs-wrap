@@ -1,3 +1,8 @@
+1.0.5
+=====
+* Changed argument in ``google.cloud.storage.client.Client.get_bucket``
+  since interface broke with google-cloud-storage 1.16.0
+
 1.0.4
 =====
 * ``crc32c`` and ``md5`` in ``Stat`` are decoded into actual bytes.
