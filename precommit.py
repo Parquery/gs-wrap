@@ -32,28 +32,28 @@ def main() -> int:
         subprocess.check_call([
             "yapf", "--in-place", "--style=style.yapf", "--recursive",
             "tests", "gswrap", "benchmark", "setup.py", "precommit.py"],
-            cwd=repo_root.as_posix())
+            cwd=str(repo_root))
         # yapf: enable
     else:
         # yapf: disable
         subprocess.check_call([
             "yapf", "--diff", "--style=style.yapf", "--recursive",
             "tests", "gswrap", "benchmark", "setup.py", "precommit.py"],
-            cwd=repo_root.as_posix())
+            cwd=str(repo_root))
         # yapf: enable
 
     print("Mypy'ing...")
     subprocess.check_call(["mypy", "--strict", "gswrap", "tests", "benchmark"],
-                          cwd=repo_root.as_posix())
+                          cwd=str(repo_root))
 
     print("Isort'ing...")
     isort_files = []  # type: List[str]
     for path in (repo_root / "gswrap").glob("**/*.py"):
-        isort_files.append(path.as_posix())
+        isort_files.append(str(path))
     for path in (repo_root / "tests").glob("**/*.py"):
-        isort_files.append(path.as_posix())
+        isort_files.append(str(path))
     for path in (repo_root / "benchmark").glob("**/*.py"):
-        isort_files.append(path.as_posix())
+        isort_files.append(str(path))
 
     if overwrite:
         cmd = [
@@ -74,10 +74,10 @@ def main() -> int:
     print("Pylint'ing...")
     subprocess.check_call(
         ["pylint", "--rcfile=pylint.rc", "tests", "gswrap", "benchmark"],
-        cwd=repo_root.as_posix())
+        cwd=str(repo_root))
 
     print("Pydocstyle'ing...")
-    subprocess.check_call(["pydocstyle", "gswrap"], cwd=repo_root.as_posix())
+    subprocess.check_call(["pydocstyle", "gswrap"], cwd=str(repo_root))
 
     print("Testing...")
     env = os.environ.copy()
@@ -87,26 +87,26 @@ def main() -> int:
         "coverage", "run", "--source", "gswrap", "-m", "unittest", "discover",
         "tests"
     ],
-                          cwd=repo_root.as_posix(),
+                          cwd=str(repo_root),
                           env=env)
 
     subprocess.check_call(["coverage", "report"])
 
     print("Doctesting...")
     subprocess.check_call(
-        ["python3", "-m", "doctest", (repo_root / "README.rst").as_posix()])
+        [sys.executable, "-m", "doctest",
+         str(repo_root / "README.rst")])
     for pth in (repo_root / "gswrap").glob("**/*.py"):
-        subprocess.check_call(["python3", "-m", "doctest", pth.as_posix()])
+        subprocess.check_call([sys.executable, "-m", "doctest", str(pth)])
 
     print("pyicontract-lint'ing...")
     for pth in (repo_root / "gswrap").glob("**/*.py"):
-        subprocess.check_call(["pyicontract-lint", pth.as_posix()])
+        subprocess.check_call(["pyicontract-lint", str(pth)])
 
     print("Twine'ing...")
-    subprocess.check_call(["python3", "setup.py", "sdist", "bdist_wheel"],
-                          cwd=repo_root.as_posix())
-    subprocess.check_call(["twine", "check", "dist/*"],
-                          cwd=repo_root.as_posix())
+    subprocess.check_call([sys.executable, "setup.py", "sdist", "bdist_wheel"],
+                          cwd=str(repo_root))
+    subprocess.check_call(["twine", "check", "dist/*"], cwd=str(repo_root))
 
     return 0
 
